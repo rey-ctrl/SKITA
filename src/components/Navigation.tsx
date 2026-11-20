@@ -32,9 +32,9 @@ export const Navigation: React.FC = () => {
     iconInactive: 'person-outline',
   };
 
-  // 1. Saat di Beranda (activeTab === 'beranda'):
-  // Tampilkan navigasi dasar beranda publik. Tab 'Beranda' aktif di bottom bar.
-  if (activeTab === 'beranda') {
+  // 1. Saat di Beranda atau Cari (navigasi umum):
+  // Tab 'Beranda' dan 'Cari' aktif di sini.
+  if (activeTab === 'beranda' || activeTab === 'sof') {
     tabs = [
       { id: 'beranda', label: 'Beranda', iconActive: 'home', iconInactive: 'home-outline' },
       ...(isAdmin
@@ -60,13 +60,12 @@ export const Navigation: React.FC = () => {
     ];
   } else if (isAdmin) {
     // 3. Admin saat akses modul sekolah:
-    // Tab Beranda tidak ada di bottom bar (karena sudah ada tombol Beranda di Header atas).
+    // Tab Beranda & Cari tidak ada di bottom bar sekolah (Beranda di Header atas, Cari di navigasi umum).
     tabs = [
       { id: 'dashboard', label: 'Dashboard', iconActive: 'grid', iconInactive: 'grid-outline' },
       { id: 'absensi', label: 'Absensi', iconActive: 'finger-print', iconInactive: 'finger-print' },
       { id: 'kantin', label: 'Kantin', iconActive: 'storefront', iconInactive: 'storefront-outline' },
       { id: 'history', label: 'History', iconActive: 'time', iconInactive: 'time-outline' },
-      { id: 'sof', label: 'Cari', iconActive: 'search', iconInactive: 'search-outline' },
       profileTab,
     ];
   } else if (isGuru) {
