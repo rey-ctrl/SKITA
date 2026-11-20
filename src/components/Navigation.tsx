@@ -1,8 +1,8 @@
 import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useApp, TabType } from '../context/AppContext';
 import { Ionicons } from '@expo/vector-icons';
+import { useApp, TabType } from '../context/AppContext';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -23,15 +23,6 @@ export const Navigation: React.FC = () => {
   const isMurid = role === 'murid';
   const isSekolah = role === 'sekolah';
 
-  // Tentukan susunan tab berdasarkan role + status keanggotaan
-  //
-  // Belum login / guest / belum punya sekolah:  [Beranda, Sekolah]
-  // Murid belum di kelas:                        [Dashboard, Sekolah]  (beranda diganti dashboard sekolah)
-  // Murid sudah di kelas:                        [Kelas, Absensi, Kantin]
-  // Guru:                                        [Dashboard, Kelas, Absensi, Kantin, History]
-  // Admin:                                       [Dashboard, Kelas, Absensi, Kantin, History, Cari]
-  // Sekolah (akun lembaga):                      [Beranda, Kelas]
-
   let tabs: TabItem[];
 
   const profileTab: TabItem = {
@@ -41,8 +32,24 @@ export const Navigation: React.FC = () => {
     iconInactive: 'person-outline',
   };
 
-  if (!user || !userSchool) {
-    // Belum bergabung sekolah
+  // 1. Saat di Beranda (activeTab === 'beranda'):
+  // Tampilkan navigasi dasar beranda publik. Tab 'Beranda' aktif di bottom bar.
+  if (activeTab === 'beranda') {
+    tabs = [
+      { id: 'beranda', label: 'Beranda', iconActive: 'home', iconInactive: 'home-outline' },
+      ...(isAdmin
+        ? [{ id: 'sof' as TabType, label: 'Cari', iconActive: 'search' as IconName, iconInactive: 'search-outline' as IconName }]
+        : []),
+      {
+        id: (isAdmin || isGuru || isSekolah ? 'dashboard' : isMurid && activeClass ? 'kelas' : 'sekolah') as TabType,
+        label: isMurid && activeClass ? 'Kelas' : 'Sekolah',
+        iconActive: 'school',
+        iconInactive: 'school-outline',
+      },
+      profileTab,
+    ];
+  } else if (!user || (!userSchool && !isAdmin && !isSekolah)) {
+    // 2. Belum login / belum punya sekolah (dan bukan admin/sekolah)
     tabs = [
       { id: 'beranda', label: 'Beranda', iconActive: 'home', iconInactive: 'home-outline' },
       ...(isAdmin
@@ -51,47 +58,46 @@ export const Navigation: React.FC = () => {
       { id: 'sekolah', label: 'Sekolah', iconActive: 'school', iconInactive: 'school-outline' },
       profileTab,
     ];
-  } else if (isMurid && !activeClass) {
-    // Murid sudah di sekolah, belum di dalam kelas
-    tabs = [
-      { id: 'beranda', label: 'Beranda', iconActive: 'home', iconInactive: 'home-outline' },
-      { id: 'dashboard', label: 'Dashboard', iconActive: 'grid', iconInactive: 'grid-outline' },
-      { id: 'sekolah', label: 'Kelas', iconActive: 'book', iconInactive: 'book-outline' },
-      profileTab,
-    ];
-  } else if (isMurid && activeClass) {
-    // Di dalam bottom bar kelas murid: hanya Beranda, Kelas, Absensi, Kantin
-    tabs = [
-      { id: 'beranda', label: 'Beranda', iconActive: 'home', iconInactive: 'home-outline' },
-      { id: 'kelas', label: 'Kelas', iconActive: 'book', iconInactive: 'book-outline' },
-      { id: 'absensi', label: 'Absensi', iconActive: 'finger-print', iconInactive: 'finger-print' },
-      { id: 'kantin', label: 'Kantin', iconActive: 'storefront', iconInactive: 'storefront-outline' },
-    ];
-  } else if (isSekolah) {
-    tabs = [
-      { id: 'beranda', label: 'Beranda', iconActive: 'home', iconInactive: 'home-outline' },
-      { id: 'kelas', label: 'Kelas', iconActive: 'book', iconInactive: 'book-outline' },
-      profileTab,
-    ];
-  } else if (isGuru) {
-    // Guru: Beranda, Dashboard Sekolah, Absensi, Kantin, History, Profil (tanpa tab Kelas)
-    tabs = [
-      { id: 'beranda', label: 'Beranda', iconActive: 'home', iconInactive: 'home-outline' },
-      { id: 'dashboard', label: 'Dashboard', iconActive: 'grid', iconInactive: 'grid-outline' },
-      { id: 'absensi', label: 'Absensi', iconActive: 'finger-print', iconInactive: 'finger-print' },
-      { id: 'kantin', label: 'Kantin', iconActive: 'storefront', iconInactive: 'storefront-outline' },
-      { id: 'history', label: 'History', iconActive: 'time', iconInactive: 'time-outline' },
-      profileTab,
-    ];
   } else if (isAdmin) {
-    // Admin: Beranda, Dashboard, Absensi, Kantin, History, Cari, Profil (tanpa tab Kelas)
+    // 3. Admin saat akses modul sekolah:
+    // Tab Beranda tidak ada di bottom bar (karena sudah ada tombol Beranda di Header atas).
     tabs = [
-      { id: 'beranda', label: 'Beranda', iconActive: 'home', iconInactive: 'home-outline' },
       { id: 'dashboard', label: 'Dashboard', iconActive: 'grid', iconInactive: 'grid-outline' },
       { id: 'absensi', label: 'Absensi', iconActive: 'finger-print', iconInactive: 'finger-print' },
       { id: 'kantin', label: 'Kantin', iconActive: 'storefront', iconInactive: 'storefront-outline' },
       { id: 'history', label: 'History', iconActive: 'time', iconInactive: 'time-outline' },
       { id: 'sof', label: 'Cari', iconActive: 'search', iconInactive: 'search-outline' },
+      profileTab,
+    ];
+  } else if (isGuru) {
+    // 4. Guru saat akses modul sekolah:
+    // Tab Beranda tidak ada di bottom bar (ada di Header atas).
+    tabs = [
+      { id: 'dashboard', label: 'Dashboard', iconActive: 'grid', iconInactive: 'grid-outline' },
+      { id: 'absensi', label: 'Absensi', iconActive: 'finger-print', iconInactive: 'finger-print' },
+      { id: 'kantin', label: 'Kantin', iconActive: 'storefront', iconInactive: 'storefront-outline' },
+      { id: 'history', label: 'History', iconActive: 'time', iconInactive: 'time-outline' },
+      profileTab,
+    ];
+  } else if (isSekolah) {
+    // 5. Akun Lembaga Sekolah
+    tabs = [
+      { id: 'dashboard', label: 'Dashboard', iconActive: 'grid', iconInactive: 'grid-outline' },
+      { id: 'kelas', label: 'Kelas', iconActive: 'book', iconInactive: 'book-outline' },
+      profileTab,
+    ];
+  } else if (isMurid && activeClass) {
+    // 6. Murid sudah di dalam kelas: hanya modul kelas, absensi, kantin (Beranda di Header atas)
+    tabs = [
+      { id: 'kelas', label: 'Kelas', iconActive: 'book', iconInactive: 'book-outline' },
+      { id: 'absensi', label: 'Absensi', iconActive: 'finger-print', iconInactive: 'finger-print' },
+      { id: 'kantin', label: 'Kantin', iconActive: 'storefront', iconInactive: 'storefront-outline' },
+    ];
+  } else if (isMurid && !activeClass) {
+    // 7. Murid di sekolah, belum masuk kelas
+    tabs = [
+      { id: 'dashboard', label: 'Dashboard', iconActive: 'grid', iconInactive: 'grid-outline' },
+      { id: 'sekolah', label: 'Kelas', iconActive: 'book', iconInactive: 'book-outline' },
       profileTab,
     ];
   } else {
@@ -118,18 +124,19 @@ export const Navigation: React.FC = () => {
           <TouchableOpacity
             key={tab.id}
             onPress={() => setActiveTab(tab.id)}
-            style={styles.tabBtn}
+            style={styles.tabItem}
             activeOpacity={0.7}
           >
-            <Ionicons
-              name={isActive ? tab.iconActive : tab.iconInactive}
-              size={22}
-              color={isActive ? '#047857' : '#475569'}
-            />
+            <View style={[styles.iconContainer, isActive && styles.iconContainerActive]}>
+              <Ionicons
+                name={isActive ? tab.iconActive : tab.iconInactive}
+                size={22}
+                color={isActive ? '#047857' : '#94a3b8'}
+              />
+            </View>
             <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]}>
               {tab.label}
             </Text>
-            {isActive && <View style={styles.activeDot} />}
           </TouchableOpacity>
         );
       })}
@@ -144,35 +151,34 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#e2e8f0',
     paddingTop: 8,
-    paddingHorizontal: 6,
-    elevation: 12,
+    paddingHorizontal: 8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -3 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    zIndex: 40,
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 8,
   },
-  tabBtn: {
+  tabItem: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 3,
+    paddingVertical: 2,
+  },
+  iconContainer: {
+    padding: 4,
+    borderRadius: 8,
+  },
+  iconContainerActive: {
+    backgroundColor: '#ecfdf5',
   },
   tabLabel: {
     fontSize: 10,
-    color: '#334155',
+    fontWeight: '500',
+    color: '#94a3b8',
     marginTop: 2,
-    fontWeight: '600',
   },
   tabLabelActive: {
     color: '#047857',
     fontWeight: '700',
-  },
-  activeDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#047857',
-    marginTop: 2,
   },
 });
