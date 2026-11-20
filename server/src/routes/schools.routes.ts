@@ -180,7 +180,7 @@ router.get('/:id/zonasi', (req: Request, res: Response) => {
 // POST /api/schools/search-on-the-fly (FR-SOF)
 // Search Google Places proxy & deduplicate & cache
 router.post('/search-on-the-fly', async (req: Request, res: Response) => {
-  const { query, import_place_id, jenjang_override, status_override } = req.body;
+  const { query, import_place_id, jenjang_override, status_override, nama_override } = req.body;
   const apiKey = process.env.GOOGLE_PLACES_API_KEY;
   const hasValidKey = apiKey && apiKey !== 'YOUR_GOOGLE_MAPS_KEY_HERE';
 
@@ -262,11 +262,16 @@ router.post('/search-on-the-fly', async (req: Request, res: Response) => {
     }
 
     const newId = `sch_custom_${Date.now()}`;
+    const cleanNama = typeof nama_override === 'string' && nama_override.trim()
+      ? nama_override.trim()
+      : found.nama;
+
     const newSchool: School = {
       ...found,
       id: newId,
+      nama: cleanNama,
       foto_url: toWebpUrl(found.foto_url),
-      jenjang: (jenjang_override as Jenjang) || guessJenjangFromName(found.nama),
+      jenjang: (jenjang_override as Jenjang) || guessJenjangFromName(cleanNama),
       status: (status_override as 'Negeri' | 'Swasta') || found.status || 'Negeri',
       is_custom_added: true,
     };

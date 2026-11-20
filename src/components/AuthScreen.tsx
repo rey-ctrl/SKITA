@@ -59,20 +59,9 @@ export const AuthScreen: React.FC = () => {
         });
         if (res.success && res.user) {
           loginWithUserData(res.user);
-          return;
         }
       } catch (err: any) {
-        // Fallback local registration jika server offline
-        console.warn('Backend offline, register local fallback:', err.message);
-        loginWithUserData({
-          id: `usr_${Date.now()}`,
-          nama: cleanNama,
-          email: cleanEmail,
-          provinsi: 'Jawa Barat',
-          kota_kab: 'Kota Bogor',
-          role: 'parent',
-        });
-        return;
+        setErrorMsg(err.message || 'Registrasi gagal. Periksa koneksi dan coba lagi.');
       } finally {
         setLoading(false);
       }
@@ -83,20 +72,9 @@ export const AuthScreen: React.FC = () => {
         const res = await apiClient.login(cleanEmail, cleanPass);
         if (res.success && res.user) {
           loginWithUserData(res.user);
-          return;
         }
       } catch (err: any) {
-        // Fallback demo user jika server offline
-        console.warn('Backend offline, login local fallback:', err.message);
-        loginWithUserData({
-          id: `usr_${Date.now()}`,
-          nama: cleanEmail.split('@')[0],
-          email: cleanEmail,
-          provinsi: 'Jawa Barat',
-          kota_kab: 'Kota Bogor',
-          role: 'parent',
-        });
-        return;
+        setErrorMsg(err.message || 'Login gagal. Periksa email, password, dan koneksi.');
       } finally {
         setLoading(false);
       }
@@ -251,6 +229,21 @@ export const AuthScreen: React.FC = () => {
               </Text>
             )}
           </TouchableOpacity>
+
+          {/* Shortcut Admin Seed */}
+          {mode === 'login' && (
+            <TouchableOpacity
+              style={styles.adminShortcutBtn}
+              onPress={() => {
+                setEmail('admin@skita.id');
+                setPassword('Admin@2026!');
+              }}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="shield-checkmark-outline" size={14} color="#dc2626" />
+              <Text style={styles.adminShortcutText}>Gunakan Akun Admin Seed (admin@skita.id)</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Guest Skip Option */}
@@ -436,6 +429,24 @@ const styles = StyleSheet.create({
   guestButtonText: {
     fontSize: 13,
     color: '#047857',
+    fontWeight: '600',
+  },
+  adminShortcutBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    backgroundColor: '#fef2f2',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    justifyContent: 'center',
+  },
+  adminShortcutText: {
+    fontSize: 11,
+    color: '#dc2626',
     fontWeight: '600',
   },
 });

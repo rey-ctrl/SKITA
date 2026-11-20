@@ -124,10 +124,10 @@ export const SearchOnTheFlyModal: React.FC = () => {
     for (const place of selectedPlaces) {
       const builtName = buildSchoolName(place.nama, batchJenjang, batchStatus);
       try {
-        const res = await apiClient.importPlace(place.place_id, batchJenjang, batchStatus);
+        const res = await apiClient.importPlace(place.place_id, batchJenjang, batchStatus, builtName);
         if (res.success && res.data) {
-          addSchoolFromSearch({ ...res.data, nama: builtName });
-          lastSavedSchool = { ...res.data, nama: builtName };
+          addSchoolFromSearch(res.data);
+          lastSavedSchool = res.data;
           successCount++;
           continue;
         }

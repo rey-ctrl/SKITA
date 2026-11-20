@@ -16,6 +16,18 @@ import { evaluateSchoolZonasi, normalizeSchoolName, buildSchoolName } from '../u
 import { haversineDistanceKm } from '../utils/geo';
 import { apiClient } from '../services/api';
 
+export type TabType =
+  | 'beranda'
+  | 'peta'
+  | 'sof'
+  | 'sekolah'
+  | 'dashboard'
+  | 'kelas'
+  | 'absensi'
+  | 'kantin'
+  | 'history'
+  | 'profil';
+
 interface AppContextType {
   user: User | null;
   isGuest: boolean;
@@ -24,32 +36,46 @@ interface AppContextType {
   schools: School[];
   zones: Record<string, SchoolZone>;
   filters: FilterState;
-  activeTab: 'beranda' | 'peta' | 'sof' | 'profil' | 'kelas';
+  activeTab: TabType;
   selectedSchool: School | null;
   mapTargetSchool: School | null;
   isRegionModalOpen: boolean;
   isFilterModalOpen: boolean;
   isLocationModalOpen: boolean;
   isClassroomModalOpen: boolean;
+  isCreateClassModalOpen: boolean;
   activeSchoolEvaluation: ZoneEvaluation | null;
+  userSchool: { id: string; name: string; jenjang?: string } | null;
+  activeClass: { id: string; name: string; schoolName: string } | null;
+  availableClasses: Array<{ id: string; nama: string; tingkat?: string | number }>;
+  lastAccessedClassId: string | null;
   // Actions
-  setActiveTab: (tab: 'beranda' | 'peta' | 'sof' | 'profil' | 'kelas') => void;
+  setActiveTab: (tab: TabType) => void;
   setSelectedSchool: (school: School | null) => void;
   setMapTargetSchool: (school: School | null) => void;
   setIsRegionModalOpen: (open: boolean) => void;
   setIsFilterModalOpen: (open: boolean) => void;
   setIsLocationModalOpen: (open: boolean) => void;
   setIsClassroomModalOpen: (open: boolean) => void;
+  setIsCreateClassModalOpen: (open: boolean) => void;
+  setUserSchool: (school: { id: string; name: string; jenjang?: string } | null) => void;
+  setActiveClass: (cls: { id: string; name: string; schoolName: string } | null) => void;
+  setAvailableClasses: (classes: Array<{ id: string; nama: string; tingkat?: string | number }>) => void;
+  setLastAccessedClassId: (id: string | null) => void;
+  refreshMembershipScope: () => Promise<{ school: any; kelas: any; classes: any[] } | null>;
   setFilters: React.Dispatch<React.SetStateAction<FilterState>>;
   saveRegion: (provinsi: string, kota_kab: string) => void;
   loginUser: (nama: string, email: string) => void;
   loginWithUserData: (user: User) => void;
+  refreshUser: () => Promise<void>;
   continueAsGuest: () => void;
   logoutUser: () => void;
   addLocation: (loc: Omit<UserLocation, 'id'>) => void;
   removeLocation: (id: string) => void;
   setActiveLocationId: (id: string) => void;
+  updateActiveLocationLabel: (label: string) => void;
   addSchoolFromSearch: (newSchool: Omit<School, 'id'>) => { success: boolean; message: string; school?: School };
+  refreshSchools: () => Promise<void>;
   deleteSchool: (schoolId: string) => Promise<void>;
   getSchoolEvaluation: (school: School) => ZoneEvaluation;
 }
@@ -71,35 +97,68 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // 4. Schools Database
   const [schools, setSchools] = useState<School[]>(INITIAL_SCHOOLS);
 
-  // Sync schools with backend PostgreSQL on mount
+  // Sync schools with backend PostgreSQL on mount & expose refreshSchools
+  const refreshSchools = async () => {
+    try {
+      const res = await apiClient.getSchools({}) as { data: Array<School & { zone?: SchoolZone }> };
+      if (res.data && Array.isArray(res.data)) {
+        setSchools(res.data);
+        const zoneMap: Record<string, SchoolZone> = {};
+        res.data.forEach((s) => {
+          if (s.zone) {
+            zoneMap[s.id] = s.zone;
+          }
+        });
+        setZones((prev) => ({ ...prev, ...zoneMap }));
+      }
+    } catch {}
+  };
+
   useEffect(() => {
-    apiClient
-      .getSchools({})
-      .then((res: { data: Array<School & { zone?: SchoolZone }> }) => {
-        if (res.data && Array.isArray(res.data)) {
-          setSchools(res.data);
-          const zoneMap: Record<string, SchoolZone> = {};
-          res.data.forEach((s) => {
-            if (s.zone) {
-              zoneMap[s.id] = s.zone;
-            }
-          });
-          setZones((prev) => ({ ...prev, ...zoneMap }));
-        }
-      })
-      .catch(() => {});
+    refreshSchools();
   }, []);
 
   // 5. School Zones
   const [zones, setZones] = useState<Record<string, SchoolZone>>(INITIAL_ZONES);
 
   // 6. Navigation & Modals
-  const [activeTab, setActiveTab] = useState<'beranda' | 'peta' | 'sof' | 'profil' | 'kelas'>('beranda');
+  const [activeTab, setActiveTab] = useState<TabType>('beranda');
   const [selectedSchool, setSelectedSchool] = useState<School | null>(null);
   const [mapTargetSchool, setMapTargetSchool] = useState<School | null>(null);
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
   const [isClassroomModalOpen, setIsClassroomModalOpen] = useState(false);
+  const [isCreateClassModalOpen, setIsCreateClassModalOpen] = useState(false);
+
+  // 7. Membership State (shared across nav + classroom view)
+  const [userSchool, setUserSchool] = useState<{ id: string; name: string; jenjang?: string } | null>(null);
+  const [activeClass, setActiveClass] = useState<{ id: string; name: string; schoolName: string } | null>(null);
+  const [availableClasses, setAvailableClasses] = useState<Array<{ id: string; nama: string; tingkat?: string | number }>>([]);
+  const [lastAccessedClassId, setLastAccessedClassId] = useState<string | null>(null);
+
+  const refreshMembershipScope = async () => {
+    try {
+      const res = await apiClient.getMonitoringScope();
+      if (res.school) {
+        setUserSchool({ id: res.school.id, name: res.school.nama, jenjang: (res.school as any).jenjang });
+      } else {
+        setUserSchool(null);
+      }
+      if (res.kelas) {
+        setActiveClass({
+          id: res.kelas.id,
+          name: res.kelas.nama,
+          schoolName: res.school?.nama || '',
+        });
+      }
+      if (res.classes) {
+        setAvailableClasses(res.classes);
+      }
+      return { school: res.school, kelas: res.kelas, classes: res.classes || [] };
+    } catch {
+      return null;
+    }
+  };
 
   // 8. Filter State
   const [filters, setFilters] = useState<FilterState>({
@@ -136,7 +195,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       id: prev?.id || `usr_${Date.now()}`,
       nama: prev?.nama || 'Pengguna SKITA',
       email: prev?.email || 'user@skita.id',
-      role: prev?.role || 'parent',
+      role: prev?.role || 'pengguna',
       provinsi,
       kota_kab,
     }));
@@ -150,7 +209,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       email,
       provinsi: 'Jawa Barat',
       kota_kab: 'Kota Bogor',
-      role: 'parent',
+      role: 'pengguna',
     });
     setIsGuest(false);
   };
@@ -158,6 +217,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const loginWithUserData = (userData: User) => {
     setUser(userData);
     setIsGuest(false);
+  };
+
+  const refreshUser = async () => {
+    try {
+      const res = await apiClient.me();
+      if (res.success && res.user) setUser(res.user);
+    } catch {
+      // token expired atau server offline — biarkan user tetap login dengan data lama
+    }
   };
 
   const continueAsGuest = () => {
@@ -168,6 +236,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const logoutUser = () => {
     setUser(null);
     setIsGuest(false);
+    apiClient.setAuthToken(null);
   };
 
   const addLocation = (newLoc: Omit<UserLocation, 'id'>) => {
@@ -180,6 +249,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const removeLocation = (locId: string) => {
     setLocations((prev) => prev.filter((l) => l.id !== locId));
     setActiveLocationId((prev) => (prev === locId ? null : prev));
+  };
+
+  const updateActiveLocationLabel = (newLabel: string) => {
+    setLocations((prev) => {
+      if (prev.length === 0) {
+        const id = `loc_${Date.now()}`;
+        setActiveLocationId(id);
+        return [{
+          id,
+          label: newLabel,
+          alamat: 'Titik Acuan Kelas Terdaftar',
+          lat: -6.5912,
+          lng: 106.7995,
+          kecamatan: 'Bogor',
+          is_default: true,
+        }];
+      }
+      const targetId = activeLocationId || prev[0].id;
+      return prev.map((l) => (l.id === targetId ? { ...l, label: newLabel } : l));
+    });
   };
 
   const addSchoolFromSearch = (newSchoolData: Omit<School, 'id'>) => {
@@ -275,7 +364,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isFilterModalOpen,
         isLocationModalOpen,
         isClassroomModalOpen,
+        isCreateClassModalOpen,
         activeSchoolEvaluation,
+        userSchool,
+        activeClass,
+        availableClasses,
+        lastAccessedClassId,
         setActiveTab,
         setSelectedSchool,
         setMapTargetSchool,
@@ -283,16 +377,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setIsFilterModalOpen,
         setIsLocationModalOpen,
         setIsClassroomModalOpen,
+        setIsCreateClassModalOpen,
+        setUserSchool,
+        setActiveClass,
+        setAvailableClasses,
+        setLastAccessedClassId,
+        refreshMembershipScope,
         setFilters,
         saveRegion,
         loginUser,
         loginWithUserData,
+        refreshUser,
         continueAsGuest,
         logoutUser,
         addLocation,
         removeLocation,
         setActiveLocationId,
+        updateActiveLocationLabel,
         addSchoolFromSearch,
+        refreshSchools,
         deleteSchool,
         getSchoolEvaluation,
       }}

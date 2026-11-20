@@ -37,9 +37,6 @@ osrm_data/
 *.osm.pbf
 *.pbf
 *.osrm*
+problem.jpg
 
-# Internal docs
-AGENTS.md
-*PRD*
-*prd*
 

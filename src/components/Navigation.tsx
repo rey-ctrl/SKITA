@@ -1,29 +1,111 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useApp } from '../context/AppContext';
+import { useApp, TabType } from '../context/AppContext';
 import { Ionicons } from '@expo/vector-icons';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
 interface TabItem {
-  id: 'beranda' | 'peta' | 'sof' | 'profil' | 'kelas';
+  id: TabType;
   label: string;
   iconActive: IconName;
   iconInactive: IconName;
-  badge?: number;
 }
 
 export const Navigation: React.FC = () => {
-  const { activeTab, setActiveTab } = useApp();
+  const { activeTab, setActiveTab, user, userSchool, activeClass } = useApp();
   const insets = useSafeAreaInsets();
 
-  const tabs: TabItem[] = [
-    { id: 'beranda', label: 'Beranda', iconActive: 'home', iconInactive: 'home-outline' },
-    { id: 'sof', label: 'Cari Baru', iconActive: 'add-circle', iconInactive: 'add-circle-outline' },
-    { id: 'kelas', label: 'Kelas', iconActive: 'school', iconInactive: 'school-outline' },
-    { id: 'profil', label: 'Profil', iconActive: 'person', iconInactive: 'person-outline' },
-  ];
+  const role = user?.role;
+  const isAdmin = role === 'admin';
+  const isGuru = role === 'guru';
+  const isMurid = role === 'murid';
+  const isSekolah = role === 'sekolah';
+
+  // Tentukan susunan tab berdasarkan role + status keanggotaan
+  //
+  // Belum login / guest / belum punya sekolah:  [Beranda, Sekolah]
+  // Murid belum di kelas:                        [Dashboard, Sekolah]  (beranda diganti dashboard sekolah)
+  // Murid sudah di kelas:                        [Kelas, Absensi, Kantin]
+  // Guru:                                        [Dashboard, Kelas, Absensi, Kantin, History]
+  // Admin:                                       [Dashboard, Kelas, Absensi, Kantin, History, Cari]
+  // Sekolah (akun lembaga):                      [Beranda, Kelas]
+
+  let tabs: TabItem[];
+
+  const profileTab: TabItem = {
+    id: 'profil',
+    label: 'Profil',
+    iconActive: 'person',
+    iconInactive: 'person-outline',
+  };
+
+  if (!user || !userSchool) {
+    // Belum bergabung sekolah
+    tabs = [
+      { id: 'beranda', label: 'Beranda', iconActive: 'home', iconInactive: 'home-outline' },
+      ...(isAdmin
+        ? [{ id: 'sof' as TabType, label: 'Cari', iconActive: 'search' as IconName, iconInactive: 'search-outline' as IconName }]
+        : []),
+      { id: 'sekolah', label: 'Sekolah', iconActive: 'school', iconInactive: 'school-outline' },
+      profileTab,
+    ];
+  } else if (isMurid && !activeClass) {
+    // Murid sudah di sekolah, belum di dalam kelas
+    tabs = [
+      { id: 'dashboard', label: 'Dashboard', iconActive: 'grid', iconInactive: 'grid-outline' },
+      { id: 'sekolah', label: 'Kelas', iconActive: 'book', iconInactive: 'book-outline' },
+      profileTab,
+    ];
+  } else if (isMurid && activeClass) {
+    // Di dalam bottom bar kelas murid: hanya Kelas, Absensi, Kantin (tanpa Profil)
+    tabs = [
+      { id: 'kelas', label: 'Kelas', iconActive: 'book', iconInactive: 'book-outline' },
+      { id: 'absensi', label: 'Absensi', iconActive: 'finger-print', iconInactive: 'finger-print' },
+      { id: 'kantin', label: 'Kantin', iconActive: 'storefront', iconInactive: 'storefront-outline' },
+    ];
+  } else if (isSekolah) {
+    tabs = [
+      { id: 'beranda', label: 'Beranda', iconActive: 'home', iconInactive: 'home-outline' },
+      { id: 'kelas', label: 'Kelas', iconActive: 'book', iconInactive: 'book-outline' },
+      profileTab,
+    ];
+  } else if (isGuru) {
+    // Guru: Dashboard Sekolah, Absensi, Kantin, History, Profil (tanpa tab Kelas)
+    tabs = [
+      { id: 'dashboard', label: 'Dashboard', iconActive: 'grid', iconInactive: 'grid-outline' },
+      { id: 'absensi', label: 'Absensi', iconActive: 'finger-print', iconInactive: 'finger-print' },
+      { id: 'kantin', label: 'Kantin', iconActive: 'storefront', iconInactive: 'storefront-outline' },
+      { id: 'history', label: 'History', iconActive: 'time', iconInactive: 'time-outline' },
+      profileTab,
+    ];
+  } else if (isAdmin) {
+    // Admin: Dashboard, Kelas, Absensi, Kantin, History, Cari, Profil
+    tabs = [
+      { id: 'dashboard', label: 'Dashboard', iconActive: 'grid', iconInactive: 'grid-outline' },
+      { id: 'kelas', label: 'Kelas', iconActive: 'book', iconInactive: 'book-outline' },
+      { id: 'absensi', label: 'Absensi', iconActive: 'finger-print', iconInactive: 'finger-print' },
+      { id: 'kantin', label: 'Kantin', iconActive: 'storefront', iconInactive: 'storefront-outline' },
+      { id: 'history', label: 'History', iconActive: 'time', iconInactive: 'time-outline' },
+      { id: 'sof', label: 'Cari', iconActive: 'search', iconInactive: 'search-outline' },
+      profileTab,
+    ];
+  } else {
+    tabs = [
+      { id: 'beranda', label: 'Beranda', iconActive: 'home', iconInactive: 'home-outline' },
+      { id: 'sekolah', label: 'Sekolah', iconActive: 'school', iconInactive: 'school-outline' },
+      profileTab,
+    ];
+  }
+
+  // Guard: kalau activeTab tidak ada di susunan tab saat ini, pindah ke tab pertama
+  useEffect(() => {
+    const ids = tabs.map((t) => t.id);
+    if (!ids.includes(activeTab)) {
+      setActiveTab(ids[0]);
+    }
+  }, [role, userSchool?.id, activeClass?.id]);
 
   return (
     <View style={[styles.navBar, { paddingBottom: Math.max(insets.bottom, 10) }]}>
@@ -36,18 +118,11 @@ export const Navigation: React.FC = () => {
             style={styles.tabBtn}
             activeOpacity={0.7}
           >
-            <View>
-              <Ionicons
-                name={isActive ? tab.iconActive : tab.iconInactive}
-                size={22}
-                color={isActive ? '#047857' : '#475569'}
-              />
-              {tab.badge !== undefined && tab.badge > 0 && (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{tab.badge}</Text>
-                </View>
-              )}
-            </View>
+            <Ionicons
+              name={isActive ? tab.iconActive : tab.iconInactive}
+              size={22}
+              color={isActive ? '#047857' : '#475569'}
+            />
             <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]}>
               {tab.label}
             </Text>
@@ -81,7 +156,7 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
   },
   tabLabel: {
-    fontSize: 11,
+    fontSize: 10,
     color: '#334155',
     marginTop: 2,
     fontWeight: '600',
@@ -96,22 +171,5 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: '#047857',
     marginTop: 2,
-  },
-  badge: {
-    position: 'absolute',
-    top: -3,
-    right: -8,
-    backgroundColor: '#e11d48',
-    borderRadius: 8,
-    minWidth: 14,
-    height: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 3,
-  },
-  badgeText: {
-    color: '#ffffff',
-    fontSize: 9,
-    fontWeight: 'bold',
   },
 });

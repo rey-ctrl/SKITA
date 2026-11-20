@@ -96,12 +96,17 @@ class SkitaApiClient {
     });
   }
 
-  async importPlace(place_id: string, jenjang_override?: string, status_override?: 'Negeri' | 'Swasta') {
+  async importPlace(
+    place_id: string,
+    jenjang_override?: string,
+    status_override?: 'Negeri' | 'Swasta',
+    nama_override?: string,
+  ) {
     return this.request<{ success: boolean; message: string; data: School }>(
       '/api/schools/search-on-the-fly',
       {
         method: 'POST',
-        body: JSON.stringify({ import_place_id: place_id, jenjang_override, status_override }),
+        body: JSON.stringify({ import_place_id: place_id, jenjang_override, status_override, nama_override }),
       }
     );
   }
@@ -135,6 +140,10 @@ class SkitaApiClient {
     );
     this.setAuthToken(res.token);
     return res;
+  }
+
+  async me() {
+    return this.request<{ success: boolean; user: User }>('/api/auth/me');
   }
 
   async loginWithGoogle(data: { nama: string; email: string; google_id_token?: string }) {
@@ -218,6 +227,313 @@ class SkitaApiClient {
         sumber: 'estimasi',
       };
     }
+  }
+
+  // 6. Admin Panel (FR-A1)
+  async getAdminUsers(role?: string) {
+    const q = role && role !== 'SEMUA' ? `?role=${role}` : '';
+    return this.request<{ success: boolean; total: number; users: User[] }>(`/api/admin/users${q}`);
+  }
+
+  async createAdminUser(data: { nama: string; email: string; password: string; role: string }) {
+    return this.request<{ success: boolean; message: string; user: User }>('/api/admin/users', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateAdminUserRole(id: string, role: string) {
+    return this.request<{ success: boolean; message: string; user: User }>(`/api/admin/users/${id}/role`, {
+      method: 'PATCH',
+      body: JSON.stringify({ role }),
+    });
+  }
+
+  async toggleAdminUserStatus(id: string) {
+    return this.request<{ success: boolean; message: string; user: User }>(`/api/admin/users/${id}/status`, {
+      method: 'PATCH',
+    });
+  }
+
+  async deleteAdminUser(id: string) {
+    return this.request<{ success: boolean; message: string }>(`/api/admin/users/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // ── School Dashboard (akun sekolah) ────────────────────────────────────────
+
+  async claimSchool(school_id: string) {
+    return this.request<{ success: boolean; message: string; school_id: string }>(
+      '/api/school-dashboard/claim',
+      { method: 'POST', body: JSON.stringify({ school_id }) }
+    );
+  }
+
+  async getSchoolDashboard() {
+    return this.request<{
+      success: boolean;
+      school: { id: string; nama: string; jenjang: string; auto_approve_teacher: boolean };
+      codes: Array<{ id: string; scope: string; code: string; valid_until: string }>;
+      classes: Array<{
+        id: string; nama: string; tingkat: string | number; created_at: string;
+        kode_kelas: { id: string; code: string; valid_until: string } | null;
+      }>;
+      pending_guru: Array<{ membership_id: string; user_id: string; nama: string; email: string; joined_at: string }>;
+    }>('/api/school-dashboard/me');
+  }
+
+  async createClass(data: { nama: string; tingkat: string | number }) {
+    return this.request<{
+      success: boolean;
+      class: { id: string; nama: string; tingkat: string | number; kode_kelas: { id: string; code: string; valid_until: string } };
+    }>('/api/school-dashboard/classes', { method: 'POST', body: JSON.stringify(data) });
+  }
+
+  async approveGuru(membership_id: string) {
+    return this.request<{ success: boolean; message: string }>(
+      `/api/school-dashboard/guru/${membership_id}/approve`,
+      { method: 'PATCH' }
+    );
+  }
+
+  async updateSchoolSettings(data: { auto_approve_teacher: boolean }) {
+    return this.request<{ success: boolean; auto_approve_teacher: boolean }>(
+      '/api/school-dashboard/settings',
+      { method: 'PATCH', body: JSON.stringify(data) }
+    );
+  }
+
+  // ── Generate kode sekolah (FR-A4) ─────────────────────────────────────────
+
+  async generateSchoolCode(school_id: string, scope: 'school_student' | 'school_teacher') {
+    return this.request<{ success: boolean; code: { id: string; code: string; scope: string; valid_until: string } }>(
+      '/api/codes/school',
+      { method: 'POST', body: JSON.stringify({ school_id, scope }) }
+    );
+  }
+
+  async generateClassCode(class_id: string) {
+    return this.request<{ success: boolean; code: { id: string; code: string; valid_until: string } }>(
+      '/api/codes/class',
+      { method: 'POST', body: JSON.stringify({ class_id }) }
+    );
+  }
+
+  async rotateCode(code_id: string) {
+    return this.request<{ success: boolean; code: { id: string; code: string; valid_until: string } }>(
+      `/api/codes/rotate/${code_id}`,
+      { method: 'POST' }
+    );
+  }
+
+  // ── Join sekolah & kelas (FR-A2) ───────────────────────────────────────────
+
+  async joinSchool(code: string) {
+    return this.request<{
+      success: boolean;
+      membership: { id: string; role: string; status: string; school_id: string };
+      school_id?: string;
+      school_name?: string;
+    }>(
+      '/api/join/school',
+      { method: 'POST', body: JSON.stringify({ code }) }
+    );
+  }
+
+  async joinClass(code: string) {
+    return this.request<{
+      success: boolean;
+      membership: { id: string; role: string; status: string; class_id: string };
+      class_id?: string;
+      class_name?: string;
+      tingkat?: string | number;
+      school_id?: string;
+    }>(
+      '/api/join/class',
+      { method: 'POST', body: JSON.stringify({ code }) }
+    );
+  }
+
+  // ── Monitoring Scope (FR-A5) ───────────────────────────────────────────────
+
+  async getMonitoringScope() {
+    return this.request<{
+      role: string;
+      kelas?: { id: string; nama: string; tingkat: string | number } | null;
+      classes?: Array<{ id: string; nama: string; tingkat: string | number }>;
+      school?: { id: string; nama: string } | null;
+    }>('/api/monitoring/scope');
+  }
+
+  // ── Delegasi Reset Password (FR-A16) ─────────────────────────────────────────
+
+  async resetPasswordDelegasi(target_user_id: string) {
+    return this.request<{ success: boolean; message: string; temp_password?: string }>(
+      '/api/school-dashboard/reset-password',
+      { method: 'POST', body: JSON.stringify({ target_user_id }) }
+    );
+  }
+
+  // ── Absensi (FR-A13, FR-A17) ─────────────────────────────────────────────────
+
+  async submitAttendanceSelf() {
+    return this.request<{ success: boolean; message: string; attendance?: any }>(
+      '/api/attendance/self',
+      { method: 'POST' }
+    );
+  }
+
+  async submitAttendanceGuru(data: {
+    murid_id: string;
+    class_id: string;
+    date?: string;
+    status: 'hadir' | 'sakit' | 'izin' | 'alpa';
+    catatan?: string;
+  }) {
+    return this.request<{ success: boolean; message: string; attendance?: any; action?: string }>(
+      '/api/attendance/guru',
+      { method: 'POST', body: JSON.stringify(data) }
+    );
+  }
+
+  async getClassAttendance(class_id: string, date?: string) {
+    const q = date ? `?date=${encodeURIComponent(date)}` : '';
+    return this.request<{
+      success: boolean;
+      class_id: string;
+      date: string;
+      records: Array<{
+        murid_id: string;
+        nama: string;
+        tanggal: string;
+        status: string;
+        catatan?: string;
+        diisi_oleh: string;
+        is_koreksi_guru: boolean;
+      }>;
+    }>(`/api/attendance/class/${class_id}${q}`);
+  }
+
+  async getMyAttendanceHistory(month?: string) {
+    const q = month ? `?month=${encodeURIComponent(month)}` : '';
+    return this.request<{
+      success: boolean;
+      count: number;
+      records: Array<{
+        id: string;
+        class_id: string;
+        class_name: string;
+        tanggal: string;
+        status: 'hadir' | 'sakit' | 'izin' | 'alpa';
+        waktu_isi: string;
+        is_koreksi_guru: boolean;
+      }>;
+    }>(`/api/attendance/my-history${q}`);
+  }
+
+  // ── Pembubaran Kelas (FR-A11) ────────────────────────────────────────────────
+
+  async getDissolutionBanner(class_id: string) {
+    return this.request<{
+      has_banner: boolean;
+      schedule_id?: string;
+      dissolution_time?: string;
+      message?: string;
+      can_manage?: boolean;
+    }>(`/api/dissolution/banner/${class_id}`);
+  }
+
+  async getDissolutionPreview(school_id: string) {
+    return this.request<{
+      success: boolean;
+      school_id: string;
+      school_name: string;
+      classes_count: number;
+      students_count: number;
+      teachers_count: number;
+      duration_hours: number;
+      warning_text: string;
+    }>(`/api/dissolution/preview/${school_id}`);
+  }
+
+  async scheduleDissolution(school_id: string, confirmation_word: string) {
+    return this.request<{ success: boolean; message: string; schedule: any }>(
+      '/api/dissolution/schedule',
+      { method: 'POST', body: JSON.stringify({ school_id, confirmation_word }) }
+    );
+  }
+
+  async cancelDissolution(schedule_id: string) {
+    return this.request<{ success: boolean; message: string }>(
+      `/api/dissolution/cancel/${schedule_id}`,
+      { method: 'POST' }
+    );
+  }
+
+  async executeDissolutionNow(schedule_id: string) {
+    return this.request<{ success: boolean; message: string; stats?: any }>(
+      `/api/dissolution/execute-now/${schedule_id}`,
+      { method: 'POST' }
+    );
+  }
+
+  // ── Anggota Kelas & Sekolah (FR-A5, FR-A9, FR-A10) ──────────────────────────
+
+  async getClassMembers(class_id: string) {
+    return this.request<{
+      success: boolean;
+      class_id: string;
+      class_name: string;
+      members: Array<{ user_id: string; nama: string; nomor_absen: number; role: string }>;
+    }>(`/api/members/class/${class_id}`);
+  }
+
+  async leaveClass(class_id: string) {
+    return this.request<{ success: boolean; message: string }>(
+      `/api/members/class/${class_id}/leave`,
+      { method: 'POST' }
+    );
+  }
+
+  async kickClassMember(class_id: string, user_id: string) {
+    return this.request<{ success: boolean; message: string }>(
+      `/api/members/class/${class_id}/kick/${user_id}`,
+      { method: 'POST' }
+    );
+  }
+
+  async kickSchoolMember(school_id: string, user_id: string) {
+    return this.request<{ success: boolean; message: string }>(
+      `/api/members/school/${school_id}/kick/${user_id}`,
+      { method: 'POST' }
+    );
+  }
+
+  async leaveSchool(school_id?: string) {
+    return this.request<{ success: boolean; message: string }>(
+      school_id ? `/api/members/school/${school_id}/leave` : '/api/members/school/leave-current',
+      { method: 'POST' }
+    );
+  }
+
+  async updateProfile(data: { nama: string }) {
+    return this.request<{ success: boolean; message: string; user: User }>(
+      '/api/auth/profile',
+      { method: 'PATCH', body: JSON.stringify(data) }
+    );
+  }
+
+  // ── Kalender Libur (FR-A13) ──────────────────────────────────────────────────
+
+  async getHolidays() {
+    return this.request<{ success: boolean; count: number; holidays: Array<{ id: string; tanggal: string; nama: string; jenis: string }> }>('/api/holidays');
+  }
+
+  async getSchoolCalendarOverrides(school_id: string) {
+    return this.request<{ success: boolean; school_id: string; overrides: Array<{ id: string; tanggal: string; override_type: string; keterangan?: string }> }>(
+      `/api/school-calendar/${school_id}`
+    );
   }
 }
 

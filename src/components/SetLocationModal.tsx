@@ -77,6 +77,12 @@ export const SetLocationModal: React.FC = () => {
   const [kecamatan, setKecamatan] = useState('');
   const [lat, setLat] = useState('');
   const [lng, setLng] = useState('');
+  const [successData, setSuccessData] = useState<{
+    alamat: string;
+    kecamatan: string;
+    lat: number;
+    lng: number;
+  } | null>(null);
 
   if (!isLocationModalOpen) return null;
 
@@ -126,11 +132,12 @@ export const SetLocationModal: React.FC = () => {
         is_default: true,
       });
 
-      setIsLocationModalOpen(false);
-      Alert.alert(
-        'Lokasi Berhasil Dideteksi',
-        `Titik acuan rumah diatur ke: ${alamatDitemukan} (Kec. ${kecamatanDitemukan}).`
-      );
+      setSuccessData({
+        alamat: alamatDitemukan,
+        kecamatan: kecamatanDitemukan,
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+      });
     } catch (err: any) {
       Alert.alert('Gagal Akses Lokasi', err?.message || 'Pastikan GPS pada ponsel Anda telah aktif.');
     } finally {
@@ -351,6 +358,56 @@ export const SetLocationModal: React.FC = () => {
           </ScrollView>
         </View>
       </View>
+
+      {/* Modal Sukses Deteksi Lokasi — @desainpakeai */}
+      <Modal
+        visible={successData !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setSuccessData(null);
+          setIsLocationModalOpen(false);
+        }}
+      >
+        <View style={styles.successModalOverlay}>
+          <View style={styles.successModalCard}>
+            <View style={styles.successAvatar}>
+              <Ionicons name="location" size={28} color="#047857" />
+            </View>
+
+            <Text style={styles.successModalTitle}>Lokasi Berhasil Dideteksi</Text>
+            <Text style={styles.successModalDesc}>
+              Titik acuan rumah telah diperbarui dan langsung dijadikan patokan zonasi serta perhitungan jarak sekolah.
+            </Text>
+
+            {successData && (
+              <View style={styles.successTargetBox}>
+                <View style={styles.successTargetRow}>
+                  <Ionicons name="pin" size={15} color="#047857" style={{ marginTop: 2 }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.successAddressText}>{successData.alamat}</Text>
+                    <Text style={styles.successMetaText}>
+                      Kecamatan {successData.kecamatan} • ({successData.lat.toFixed(5)}, {successData.lng.toFixed(5)})
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            )}
+
+            <TouchableOpacity
+              onPress={() => {
+                setSuccessData(null);
+                setIsLocationModalOpen(false);
+              }}
+              style={styles.successActionBtn}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="checkmark-sharp" size={18} color="#ffffff" />
+              <Text style={styles.successActionBtnText}>Gunakan Titik Ini</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </Modal>
   );
 };
@@ -598,6 +655,93 @@ const styles = StyleSheet.create({
   },
   saveText: {
     fontSize: 11,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+
+  // Modal Sukses Lokasi (@desainpakeai)
+  successModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  successModalCard: {
+    width: '100%',
+    maxWidth: 380,
+    backgroundColor: '#ffffff',
+    borderRadius: 18,
+    padding: 22,
+    alignItems: 'center',
+    gap: 12,
+    elevation: 6,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+  },
+  successAvatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#ecfdf5',
+    borderWidth: 1.5,
+    borderColor: '#a7f3d0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  successModalTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#0f172a',
+    textAlign: 'center',
+  },
+  successModalDesc: {
+    fontSize: 13,
+    color: '#64748b',
+    textAlign: 'center',
+    lineHeight: 18,
+    paddingHorizontal: 6,
+  },
+  successTargetBox: {
+    width: '100%',
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    padding: 12,
+  },
+  successTargetRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  successAddressText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0f172a',
+    lineHeight: 18,
+  },
+  successMetaText: {
+    fontSize: 11,
+    color: '#047857',
+    marginTop: 3,
+    fontWeight: '500',
+  },
+  successActionBtn: {
+    width: '100%',
+    height: 46,
+    borderRadius: 10,
+    backgroundColor: '#047857',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 4,
+  },
+  successActionBtnText: {
+    fontSize: 13,
     fontWeight: '700',
     color: '#ffffff',
   },

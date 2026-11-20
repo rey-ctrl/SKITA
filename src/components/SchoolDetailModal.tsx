@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -8,7 +8,9 @@ import {
   TouchableOpacity,
   Linking,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { useApp } from '../context/AppContext';
 import { formatDistance } from '../utils/geo';
 import { Jenjang } from '../types';
@@ -40,10 +42,16 @@ export const SchoolDetailModal: React.FC = () => {
     activeLocation,
     setActiveTab,
     deleteSchool,
+    user,
   } = useApp();
+
+  const [copiedToast, setCopiedToast] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   if (!selectedSchool) return null;
 
+  const isAdmin = user?.role === 'admin';
   const evaluation = getSchoolEvaluation(selectedSchool);
   const zone = zones[selectedSchool.id];
   const theme = getJenjangTheme(selectedSchool.jenjang);
@@ -56,21 +64,23 @@ export const SchoolDetailModal: React.FC = () => {
     setActiveTab('peta');
   };
 
-  const handleDeleteSchool = () => {
-    Alert.alert(
-      'Hapus Sekolah',
-      `Yakin ingin menghapus ${selectedSchool.nama} dari database SKITA?`,
-      [
-        { text: 'Batal', style: 'cancel' },
-        {
-          text: 'Hapus',
-          style: 'destructive',
-          onPress: async () => {
-            await deleteSchool(selectedSchool.id);
-          },
-        },
-      ]
-    );
+  const handleCopySchoolId = async () => {
+    await Clipboard.setStringAsync(selectedSchool.id);
+    setCopiedToast(true);
+    setTimeout(() => setCopiedToast(false), 2200);
+  };
+
+  const handleConfirmDeleteSchool = async () => {
+    setDeleting(true);
+    try {
+      await deleteSchool(selectedSchool.id);
+      setShowDeleteModal(false);
+      setSelectedSchool(null);
+    } catch (e: any) {
+      Alert.alert('Gagal Menghapus', e.message || 'Terjadi kesalahan saat menghapus sekolah.');
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const handleReportWhatsApp = () => {
@@ -113,6 +123,22 @@ export const SchoolDetailModal: React.FC = () => {
                     <Text style={styles.npsnText}>NPSN: {selectedSchool.npsn}</Text>
                   </View>
                 ) : null}
+
+                {/* KODE SEKOLAH — HANYA ADMIN */}
+                {isAdmin && (
+                  <TouchableOpacity
+                    onLongPress={handleCopySchoolId}
+                    onPress={handleCopySchoolId}
+                    style={styles.adminCodeBadge}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="key" size={10} color="#0369a1" />
+                    <Text style={styles.adminCodeText} numberOfLines={1}>
+                      {selectedSchool.id}
+                    </Text>
+                    <Ionicons name="copy-outline" size={10} color="#0284c7" />
+                  </TouchableOpacity>
+                )}
               </View>
 
               <TouchableOpacity
@@ -125,6 +151,14 @@ export const SchoolDetailModal: React.FC = () => {
             </View>
 
             <Text style={styles.schoolTitle}>{selectedSchool.nama}</Text>
+
+            {/* Toast feedback salin kode */}
+            {copiedToast && (
+              <View style={styles.copyToast}>
+                <Ionicons name="checkmark-circle" size={13} color="#047857" />
+                <Text style={styles.copyToastText}>Kode sekolah disalin ke clipboard</Text>
+              </View>
+            )}
           </View>
 
           {/* Scrollable details */}
@@ -285,11 +319,66 @@ export const SchoolDetailModal: React.FC = () => {
               <Text style={styles.reportBtnText}>Laporkan Koreksi Data ke WhatsApp</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={handleDeleteSchool} style={styles.deleteBtn} activeOpacity={0.7}>
-              <Ionicons name="trash-outline" size={16} color="#dc2626" />
-              <Text style={styles.deleteBtnText}>Hapus Sekolah dari Database</Text>
-            </TouchableOpacity>
+            {/* Hapus sekolah — HANYA ADMIN */}
+            {isAdmin && (
+              <TouchableOpacity onPress={() => setShowDeleteModal(true)} style={styles.deleteBtn} activeOpacity={0.7}>
+                <Ionicons name="trash-outline" size={16} color="#dc2626" />
+                <Text style={styles.deleteBtnText}>Hapus Sekolah dari Database</Text>
+              </TouchableOpacity>
+            )}
           </ScrollView>
+
+          {/* Modal Konfirmasi Hapus Sekolah — @desainpakeai */}
+          <Modal
+            visible={showDeleteModal}
+            transparent
+            animationType="fade"
+            onRequestClose={() => {
+              if (!deleting) setShowDeleteModal(false);
+            }}
+          >
+            <View style={styles.confirmModalOverlay}>
+              <View style={styles.confirmModalCard}>
+                <View style={styles.confirmDangerAvatar}>
+                  <Ionicons name="trash-outline" size={24} color="#dc2626" />
+                </View>
+                <Text style={styles.confirmModalTitle}>Hapus Sekolah</Text>
+                <Text style={styles.confirmModalDesc}>
+                  Sekolah ini akan dihapus permanen dari sistem SKITA dan tidak dapat dipulihkan.
+                </Text>
+
+                <View style={styles.confirmTargetBox}>
+                  <Text style={styles.confirmTargetTitle} numberOfLines={1}>{selectedSchool.nama}</Text>
+                  <Text style={styles.confirmTargetSub}>
+                    ID: {selectedSchool.id} • {selectedSchool.jenjang} ({selectedSchool.status})
+                  </Text>
+                </View>
+
+                <View style={styles.confirmBtnRow}>
+                  <TouchableOpacity
+                    onPress={() => setShowDeleteModal(false)}
+                    disabled={deleting}
+                    style={styles.confirmCancelBtn}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.confirmCancelBtnText}>Batal</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={handleConfirmDeleteSchool}
+                    disabled={deleting}
+                    style={styles.confirmDeleteBtn}
+                    activeOpacity={0.8}
+                  >
+                    {deleting ? (
+                      <ActivityIndicator size="small" color="#ffffff" />
+                    ) : (
+                      <Text style={styles.confirmDeleteBtnText}>Hapus Sekolah</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </Modal>
         </View>
       </View>
     </Modal>
@@ -677,5 +766,139 @@ const styles = StyleSheet.create({
     color: '#dc2626',
     fontSize: 11,
     fontWeight: '700',
+  },
+
+  // Admin Code Badge
+  adminCodeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#f0f9ff',
+    borderWidth: 1,
+    borderColor: '#bae6fd',
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  adminCodeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#0369a1',
+    maxWidth: 120,
+  },
+  copyToast: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#ecfdf5',
+    borderWidth: 1,
+    borderColor: '#a7f3d0',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    marginTop: 6,
+    alignSelf: 'flex-start',
+  },
+  copyToastText: {
+    fontSize: 11,
+    color: '#065f46',
+    fontWeight: '600',
+  },
+
+  // Modal Konfirmasi Hapus (@desainpakeai)
+  confirmModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  confirmModalCard: {
+    width: '100%',
+    maxWidth: 380,
+    backgroundColor: '#ffffff',
+    borderRadius: 18,
+    padding: 22,
+    alignItems: 'center',
+    gap: 12,
+    elevation: 6,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+  },
+  confirmDangerAvatar: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#fee2e2',
+    borderWidth: 1,
+    borderColor: '#fca5a5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  confirmModalTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#0f172a',
+    textAlign: 'center',
+  },
+  confirmModalDesc: {
+    fontSize: 13,
+    color: '#64748b',
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  confirmTargetBox: {
+    width: '100%',
+    backgroundColor: '#f8fafc',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    padding: 12,
+    gap: 3,
+  },
+  confirmTargetTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1e293b',
+  },
+  confirmTargetSub: {
+    fontSize: 11,
+    color: '#64748b',
+  },
+  confirmBtnRow: {
+    flexDirection: 'row',
+    gap: 10,
+    width: '100%',
+    marginTop: 4,
+  },
+  confirmCancelBtn: {
+    flex: 1,
+    height: 44,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffffff',
+  },
+  confirmCancelBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#334155',
+  },
+  confirmDeleteBtn: {
+    flex: 1,
+    height: 44,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#dc2626',
+  },
+  confirmDeleteBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#ffffff',
   },
 });

@@ -5,9 +5,9 @@ export interface User {
   id: string;
   nama: string;
   email: string;
-  provinsi: string;
-  kota_kab: string;
-  role: 'parent' | 'student' | 'school' | 'guest';
+  provinsi?: string;
+  kota_kab?: string;
+  role: 'admin' | 'sekolah' | 'guru' | 'murid' | 'pengguna' | 'parent' | 'student' | 'guest';
 }
 
 export interface UserLocation {

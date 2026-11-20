@@ -1,15 +1,14 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  TextInput,
-  Alert,
 } from 'react-native';
 import { useApp } from '../context/AppContext';
 import { Ionicons } from '@expo/vector-icons';
+import { AdminPanelScreen } from './AdminPanelScreen';
 
 export const ProfileScreen: React.FC = () => {
   const {
@@ -17,22 +16,20 @@ export const ProfileScreen: React.FC = () => {
     locations,
     setIsRegionModalOpen,
     setIsLocationModalOpen,
-    loginUser,
     logoutUser,
+    refreshUser,
   } = useApp();
 
-  const [authMode, setAuthMode] = useState<'view' | 'login'>('view');
-  const [nameInput, setNameInput] = useState('');
-  const [emailInput, setEmailInput] = useState('');
+  // Sinkronisasi data user dari server setiap masuk ke tab Profil
+  useEffect(() => {
+    refreshUser();
+  }, []);
 
-  const handleLogin = () => {
-    if (!nameInput.trim() || !emailInput.trim()) {
-      Alert.alert('Perhatian', 'Nama dan Email wajib diisi.');
-      return;
-    }
-    loginUser(nameInput.trim(), emailInput.trim());
-    setAuthMode('view');
-  };
+  const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
+
+  if (isAdminPanelOpen) {
+    return <AdminPanelScreen onClose={() => setIsAdminPanelOpen(false)} />;
+  }
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -46,8 +43,10 @@ export const ProfileScreen: React.FC = () => {
             <>
               <Text style={styles.userName}>{user.nama}</Text>
               <Text style={styles.userEmail}>{user.email}</Text>
-              <View style={styles.rolePill}>
-                <Text style={styles.roleText}>Akun Orang Tua / Siswa</Text>
+              <View style={[styles.rolePill, user.role === 'admin' && { backgroundColor: '#dc262618' }]}>
+                <Text style={[styles.roleText, user.role === 'admin' && { color: '#dc2626' }]}>
+                  {user.role === 'admin' ? 'Administrator SKITA' : user.role === 'sekolah' ? 'Akun Sekolah' : user.role === 'guru' ? 'Guru' : user.role === 'murid' ? 'Murid' : 'Pengguna'}
+                </Text>
               </View>
             </>
           ) : (
@@ -58,6 +57,32 @@ export const ProfileScreen: React.FC = () => {
           )}
         </View>
       </View>
+
+      {/* Admin Quick Action Card (HANYA UNTUK ROLE ADMIN) */}
+      {user?.role === 'admin' && (
+        <View style={styles.adminCard}>
+          <View style={styles.adminHeader}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Ionicons name="shield-checkmark" size={18} color="#dc2626" />
+              <Text style={styles.adminTitle}>Admin Control Panel</Text>
+            </View>
+            <View style={styles.adminBadge}>
+              <Text style={styles.adminBadgeText}>FR-A1</Text>
+            </View>
+          </View>
+          <Text style={styles.adminDesc}>
+            Kelola akun pengguna, tetapkan role sekolah/guru, dan pantau status sistem.
+          </Text>
+          <TouchableOpacity
+            style={styles.adminBtn}
+            onPress={() => setIsAdminPanelOpen(true)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="people" size={16} color="#ffffff" />
+            <Text style={styles.adminBtnText}>Buka Manajemen Pengguna</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Region Card */}
       <View style={styles.sectionCard}>
@@ -114,35 +139,8 @@ export const ProfileScreen: React.FC = () => {
           <Ionicons name="log-out-outline" size={16} color="#e11d48" />
           <Text style={styles.logoutText}>Keluar Akun</Text>
         </TouchableOpacity>
-      ) : authMode === 'login' ? (
-        <View style={styles.loginForm}>
-          <Text style={styles.formTitle}>Masuk Akun SKITA</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Nama Lengkap"
-            placeholderTextColor="#94a3b8"
-            value={nameInput}
-            onChangeText={setNameInput}
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="Email"
-            placeholderTextColor="#94a3b8"
-            value={emailInput}
-            onChangeText={setEmailInput}
-            keyboardType="email-address"
-          />
-          <View style={styles.formBtnRow}>
-            <TouchableOpacity onPress={() => setAuthMode('view')} style={styles.cancelBtn}>
-              <Text style={styles.cancelBtnText}>Batal</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={handleLogin} style={styles.submitBtn}>
-              <Text style={styles.submitBtnText}>Masuk</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
       ) : (
-        <TouchableOpacity onPress={() => setAuthMode('login')} style={styles.loginBtn} activeOpacity={0.7}>
+        <TouchableOpacity onPress={logoutUser} style={styles.loginBtn} activeOpacity={0.7}>
           <Ionicons name="log-in-outline" size={16} color="#ffffff" />
           <Text style={styles.loginBtnText}>Masuk / Daftar Akun</Text>
         </TouchableOpacity>
@@ -203,6 +201,62 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '700',
     color: '#065f46',
+  },
+  adminCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1.5,
+    borderColor: '#fecaca',
+    shadowColor: '#dc2626',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  adminHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  adminTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  adminBadge: {
+    backgroundColor: '#fef2f2',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  adminBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#dc2626',
+  },
+  adminDesc: {
+    fontSize: 12,
+    color: '#64748b',
+    marginBottom: 12,
+    lineHeight: 16,
+  },
+  adminBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#dc2626',
+    borderRadius: 10,
+    paddingVertical: 10,
+  },
+  adminBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#ffffff',
   },
   sectionCard: {
     backgroundColor: '#ffffff',

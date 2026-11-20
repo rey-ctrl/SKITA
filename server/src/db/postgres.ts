@@ -115,7 +115,10 @@ export async function syncFromPostgresToMemory() {
         provinsi: row.provinsi,
         kota_kab: row.kota_kab,
         role: row.role,
+        must_change_password: row.must_change_password,
+        is_active: row.is_active,
         created_at: row.created_at,
+        updated_at: row.updated_at,
       });
     }
 
@@ -182,10 +185,11 @@ export async function persistUser(u: User) {
   if (pool && isPostgresConnected) {
     try {
       await pool.query(
-        `INSERT INTO users (id, nama, email, password_hash, provinsi, kota_kab, role)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `INSERT INTO users (id, nama, email, password_hash, provinsi, kota_kab, role, must_change_password, is_active)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          ON CONFLICT (id) DO NOTHING`,
-        [u.id, u.nama, u.email, u.password_hash, u.provinsi, u.kota_kab, u.role]
+        [u.id, u.nama, u.email, u.password_hash, u.provinsi || null, u.kota_kab || null,
+         u.role, u.must_change_password ?? false, u.is_active ?? true]
       );
     } catch (err) {
       console.error('[PostgreSQL] Gagal menyimpan user ke database:', err);

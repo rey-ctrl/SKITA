@@ -12,6 +12,9 @@ import { InteractiveMapNative } from './src/components/InteractiveMapNative';
 import { SearchOnTheFlyModal } from './src/components/SearchOnTheFlyModal';
 import { ProfileScreen } from './src/components/ProfileScreen';
 import { ClassroomView } from './src/components/ClassroomModal';
+import { AttendanceScreen } from './src/components/AttendanceScreen';
+import { KantinScreen } from './src/components/KantinScreen';
+import { HistoryScreen } from './src/components/HistoryScreen';
 import { FilterModal } from './src/components/FilterModal';
 import { SchoolDetailModal } from './src/components/SchoolDetailModal';
 import { SetLocationModal } from './src/components/SetLocationModal';
@@ -43,7 +46,14 @@ const MainAppContent: React.FC = () => {
         {activeTab === 'beranda' && <DashboardScreen />}
         {activeTab === 'peta' && <InteractiveMapNative />}
         {activeTab === 'sof' && <SearchOnTheFlyModal />}
+        {/* sekolah = ClassroomView dalam mode school portal / join flow */}
+        {activeTab === 'sekolah' && <ClassroomView />}
+        {/* dashboard = ClassroomView juga (school dashboard setelah join) */}
+        {activeTab === 'dashboard' && <ClassroomView />}
         {activeTab === 'kelas' && <ClassroomView />}
+        {activeTab === 'absensi' && <AttendanceScreen />}
+        {activeTab === 'kantin' && <KantinScreen />}
+        {activeTab === 'history' && <HistoryScreen />}
         {activeTab === 'profil' && <ProfileScreen />}
       </View>
 

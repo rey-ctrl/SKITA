@@ -15,16 +15,18 @@ import { Jenjang } from '../types';
 import { Ionicons, Feather } from '@expo/vector-icons';
 
 export const DashboardScreen: React.FC = () => {
-  const { schools, filters, setFilters, getSchoolEvaluation, setActiveTab, user } = useApp();
+  const { schools, filters, setFilters, getSchoolEvaluation, setActiveTab, user, refreshSchools } = useApp();
   const [refreshing, setRefreshing] = useState(false);
 
   const jenjangPills: (Jenjang | 'SEMUA')[] = ['SEMUA', 'SMP', 'MTs', 'SMA', 'SMK', 'MA'];
 
-  const onRefresh = () => {
+  const onRefresh = async () => {
     setRefreshing(true);
-    setTimeout(() => {
+    try {
+      await refreshSchools();
+    } finally {
       setRefreshing(false);
-    }, 600);
+    }
   };
 
   const filteredSchools = useMemo(() => {
@@ -149,14 +151,16 @@ export const DashboardScreen: React.FC = () => {
             <Text style={styles.emptySub}>
               Tidak ada sekolah yang cocok dengan filter atau kata kunci saat ini.
             </Text>
-            <TouchableOpacity
-              onPress={() => setActiveTab('sof')}
-              style={styles.emptyBtn}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="add-circle-outline" size={16} color="#ffffff" />
-              <Text style={styles.emptyBtnText}>Cari Sekolah Baru via Google</Text>
-            </TouchableOpacity>
+            {user?.role === 'admin' ? (
+              <TouchableOpacity
+                onPress={() => setActiveTab('sof')}
+                style={styles.emptyBtn}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="search" size={16} color="#ffffff" />
+                <Text style={styles.emptyBtnText}>Cari Sekolah Baru via Google</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         }
       />
