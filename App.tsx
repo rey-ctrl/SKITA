@@ -54,7 +54,8 @@ const MainAppContent: React.FC = () => {
         {activeTab === 'absensi' && <AttendanceScreen />}
         {activeTab === 'kantin' && <KantinScreen />}
         {activeTab === 'history' && <HistoryScreen />}
-        {activeTab === 'profil' && <ProfileScreen />}
+        {activeTab === 'profil' && <ProfileScreen mode="umum" />}
+        {activeTab === 'profil_sekolah' && <ProfileScreen mode="sekolah" />}
       </View>
 
       {/* Bottom Tabs */}

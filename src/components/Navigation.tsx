@@ -25,16 +25,23 @@ export const Navigation: React.FC = () => {
 
   let tabs: TabItem[];
 
-  const profileTab: TabItem = {
+  const profileUmumTab: TabItem = {
     id: 'profil',
     label: 'Profil',
     iconActive: 'person',
     iconInactive: 'person-outline',
   };
 
-  // 1. Saat di Beranda atau Cari (navigasi umum):
-  // Tab 'Beranda' dan 'Cari' aktif di sini.
-  if (activeTab === 'beranda' || activeTab === 'sof') {
+  const profileSekolahTab: TabItem = {
+    id: 'profil_sekolah',
+    label: 'Profil Sekolah',
+    iconActive: 'person-circle',
+    iconInactive: 'person-circle-outline',
+  };
+
+  // 1. Saat di Beranda, Cari, atau Profil Umum:
+  // Tab 'Beranda', 'Cari', dan 'Profil' (Umum) aktif di sini.
+  if (activeTab === 'beranda' || activeTab === 'sof' || activeTab === 'profil') {
     tabs = [
       { id: 'beranda', label: 'Beranda', iconActive: 'home', iconInactive: 'home-outline' },
       ...(isAdmin
@@ -46,7 +53,7 @@ export const Navigation: React.FC = () => {
         iconActive: 'school',
         iconInactive: 'school-outline',
       },
-      profileTab,
+      profileUmumTab,
     ];
   } else if (!user || (!userSchool && !isAdmin && !isSekolah)) {
     // 2. Belum login / belum punya sekolah (dan bukan admin/sekolah)
@@ -56,7 +63,7 @@ export const Navigation: React.FC = () => {
         ? [{ id: 'sof' as TabType, label: 'Cari', iconActive: 'search' as IconName, iconInactive: 'search-outline' as IconName }]
         : []),
       { id: 'sekolah', label: 'Sekolah', iconActive: 'school', iconInactive: 'school-outline' },
-      profileTab,
+      profileUmumTab,
     ];
   } else if (isAdmin) {
     // 3. Admin saat akses modul sekolah:
@@ -66,7 +73,7 @@ export const Navigation: React.FC = () => {
       { id: 'absensi', label: 'Absensi', iconActive: 'finger-print', iconInactive: 'finger-print' },
       { id: 'kantin', label: 'Kantin', iconActive: 'storefront', iconInactive: 'storefront-outline' },
       { id: 'history', label: 'History', iconActive: 'time', iconInactive: 'time-outline' },
-      profileTab,
+      profileSekolahTab,
     ];
   } else if (isGuru) {
     // 4. Guru saat akses modul sekolah:
@@ -76,14 +83,14 @@ export const Navigation: React.FC = () => {
       { id: 'absensi', label: 'Absensi', iconActive: 'finger-print', iconInactive: 'finger-print' },
       { id: 'kantin', label: 'Kantin', iconActive: 'storefront', iconInactive: 'storefront-outline' },
       { id: 'history', label: 'History', iconActive: 'time', iconInactive: 'time-outline' },
-      profileTab,
+      profileSekolahTab,
     ];
   } else if (isSekolah) {
     // 5. Akun Lembaga Sekolah
     tabs = [
       { id: 'dashboard', label: 'Dashboard', iconActive: 'grid', iconInactive: 'grid-outline' },
       { id: 'kelas', label: 'Kelas', iconActive: 'book', iconInactive: 'book-outline' },
-      profileTab,
+      profileSekolahTab,
     ];
   } else if (isMurid && activeClass) {
     // 6. Murid sudah di dalam kelas: hanya modul kelas, absensi, kantin (Beranda di Header atas)
@@ -97,13 +104,13 @@ export const Navigation: React.FC = () => {
     tabs = [
       { id: 'dashboard', label: 'Dashboard', iconActive: 'grid', iconInactive: 'grid-outline' },
       { id: 'sekolah', label: 'Kelas', iconActive: 'book', iconInactive: 'book-outline' },
-      profileTab,
+      profileSekolahTab,
     ];
   } else {
     tabs = [
       { id: 'beranda', label: 'Beranda', iconActive: 'home', iconInactive: 'home-outline' },
       { id: 'sekolah', label: 'Sekolah', iconActive: 'school', iconInactive: 'school-outline' },
-      profileTab,
+      profileUmumTab,
     ];
   }
 

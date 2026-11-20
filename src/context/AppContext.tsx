@@ -26,7 +26,8 @@ export type TabType =
   | 'absensi'
   | 'kantin'
   | 'history'
-  | 'profil';
+  | 'profil'
+  | 'profil_sekolah';
 
 interface AppContextType {
   user: User | null;
