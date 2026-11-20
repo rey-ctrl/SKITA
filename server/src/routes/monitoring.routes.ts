@@ -240,4 +240,88 @@ router.get('/school/:school_id/unassigned-students', (req: AuthRequest, res: Res
   res.json({ success: true, total: unassigned.length, students: unassigned });
 });
 
+// --------------------------------------------------------------------------
+// GET /api/monitoring/history — Riwayat Aktivitas & Log Audit (FR-A14)
+// --------------------------------------------------------------------------
+router.get('/history', (req: AuthRequest, res: Response) => {
+  const userId = req.user!.userId;
+  const user = db.users.get(userId);
+  const role = user?.role || req.user!.role;
+
+  let logs = [...db.auditLog.values()];
+
+  // Jika bukan admin, saring yang relevan dengan user / kelas / sekolahnya
+  if (role !== 'admin') {
+    logs = logs.filter(
+      (l) =>
+        l.actor_id === userId ||
+        l.target_id === userId ||
+        (l.details && (l.details.user_id === userId || l.details.email === user?.email))
+    );
+  }
+
+  // Format menjadi history items
+  const history = logs
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+    .map((l) => {
+      let judul = 'Aktivitas Sistem';
+      let tipe = 'sistem';
+      let icon = 'ellipse';
+      let iconColor = '#047857';
+      let iconBg = '#ecfdf5';
+
+      if (l.action === 'login') {
+        judul = 'Akun Masuk (Login)';
+        tipe = 'anggota';
+        icon = 'log-in';
+        iconColor = '#1d4ed8';
+        iconBg = '#dbeafe';
+      } else if (l.action.includes('class')) {
+        judul = l.action === 'create_class' ? 'Pembuatan Kelas Baru' : 'Aktivitas Kelas';
+        tipe = 'kelas';
+        icon = 'book';
+        iconColor = '#d97706';
+        iconBg = '#fef3c7';
+      } else if (l.action.includes('school')) {
+        judul = 'Aktivitas Sekolah';
+        tipe = 'sekolah';
+        icon = 'school';
+        iconColor = '#7c3aed';
+        iconBg = '#ede9fe';
+      } else if (l.action.includes('attendance')) {
+        judul = 'Presensi & Kehadiran';
+        tipe = 'absensi';
+        icon = 'finger-print';
+        iconColor = '#047857';
+        iconBg = '#ecfdf5';
+      }
+
+      const actor = db.users.get(l.actor_id);
+      const deskripsi =
+        l.details && Object.keys(l.details).length > 0
+          ? `${actor?.nama ? actor.nama + ': ' : ''}${Object.entries(l.details).map(([k, v]) => `${k}=${v}`).join(', ')}`
+          : `Aktivitas dicatat untuk target: ${l.target_id}`;
+
+      return {
+        id: l.id,
+        tipe,
+        judul,
+        deskripsi,
+        waktu: new Date(l.timestamp).toLocaleString('id-ID', {
+          dateStyle: 'medium',
+          timeStyle: 'short',
+        }),
+        timestamp: l.timestamp,
+        icon,
+        iconColor,
+        iconBg,
+      };
+    });
+
+  res.json({
+    success: true,
+    history,
+  });
+});
+
 export default router;

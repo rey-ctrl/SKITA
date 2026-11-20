@@ -1505,15 +1505,6 @@ function AdminSchoolMonitorView() {
       ) : (
         /* Jika Admin Sedang Memilih Sekolah: Tampilkan Seluruh Kelas Sekolah Tersebut */
         <>
-          <TouchableOpacity
-            onPress={() => setSelectedSchool(null)}
-            style={s.backStep}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="arrow-back" size={14} color="#64748b" />
-            <Text style={s.backStepText}>Kembali ke Daftar Semua Sekolah</Text>
-          </TouchableOpacity>
-
           <View style={[s.schoolBanner, { backgroundColor: '#064e3b' }]}>
             <Ionicons name="school" size={24} color="#a7f3d0" />
             <View style={{ flex: 1 }}>
@@ -1522,6 +1513,18 @@ function AdminSchoolMonitorView() {
                 Jenjang {selectedSchool.jenjang || '-'} · Mode Pengawasan & Kelas
               </Text>
             </View>
+          </View>
+
+          {/* Tombol kembali ke daftar sekolah di bawah sekolah align-right */}
+          <View style={{ alignItems: 'flex-end', marginTop: 8, marginBottom: 4 }}>
+            <TouchableOpacity
+              onPress={() => setSelectedSchool(null)}
+              style={s.backToSchoolsBtn}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="arrow-back" size={13} color="#047857" />
+              <Text style={s.backToSchoolsBtnText}>Kembali ke Daftar Sekolah</Text>
+            </TouchableOpacity>
           </View>
 
           <View style={s.sectionHeader}>
@@ -1800,6 +1803,23 @@ const s = StyleSheet.create({
   },
   schoolBannerName: { fontSize: 13, fontWeight: '700', color: '#ffffff' },
   schoolBannerJenjang: { fontSize: 10, color: '#c7d2fe', marginTop: 1 },
+
+  backToSchoolsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#ecfdf5',
+    borderWidth: 1,
+    borderColor: '#a7f3d0',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  backToSchoolsBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#047857',
+  },
 
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   sectionTitle: { fontSize: 11, fontWeight: '700', color: '#475569', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 4 },

@@ -54,13 +54,15 @@ export const Navigation: React.FC = () => {
   } else if (isMurid && !activeClass) {
     // Murid sudah di sekolah, belum di dalam kelas
     tabs = [
+      { id: 'beranda', label: 'Beranda', iconActive: 'home', iconInactive: 'home-outline' },
       { id: 'dashboard', label: 'Dashboard', iconActive: 'grid', iconInactive: 'grid-outline' },
       { id: 'sekolah', label: 'Kelas', iconActive: 'book', iconInactive: 'book-outline' },
       profileTab,
     ];
   } else if (isMurid && activeClass) {
-    // Di dalam bottom bar kelas murid: hanya Kelas, Absensi, Kantin (tanpa Profil)
+    // Di dalam bottom bar kelas murid: hanya Beranda, Kelas, Absensi, Kantin
     tabs = [
+      { id: 'beranda', label: 'Beranda', iconActive: 'home', iconInactive: 'home-outline' },
       { id: 'kelas', label: 'Kelas', iconActive: 'book', iconInactive: 'book-outline' },
       { id: 'absensi', label: 'Absensi', iconActive: 'finger-print', iconInactive: 'finger-print' },
       { id: 'kantin', label: 'Kantin', iconActive: 'storefront', iconInactive: 'storefront-outline' },
@@ -72,8 +74,9 @@ export const Navigation: React.FC = () => {
       profileTab,
     ];
   } else if (isGuru) {
-    // Guru: Dashboard Sekolah, Absensi, Kantin, History, Profil (tanpa tab Kelas)
+    // Guru: Beranda, Dashboard Sekolah, Absensi, Kantin, History, Profil (tanpa tab Kelas)
     tabs = [
+      { id: 'beranda', label: 'Beranda', iconActive: 'home', iconInactive: 'home-outline' },
       { id: 'dashboard', label: 'Dashboard', iconActive: 'grid', iconInactive: 'grid-outline' },
       { id: 'absensi', label: 'Absensi', iconActive: 'finger-print', iconInactive: 'finger-print' },
       { id: 'kantin', label: 'Kantin', iconActive: 'storefront', iconInactive: 'storefront-outline' },
@@ -81,10 +84,10 @@ export const Navigation: React.FC = () => {
       profileTab,
     ];
   } else if (isAdmin) {
-    // Admin: Dashboard, Kelas, Absensi, Kantin, History, Cari, Profil
+    // Admin: Beranda, Dashboard, Absensi, Kantin, History, Cari, Profil (tanpa tab Kelas)
     tabs = [
+      { id: 'beranda', label: 'Beranda', iconActive: 'home', iconInactive: 'home-outline' },
       { id: 'dashboard', label: 'Dashboard', iconActive: 'grid', iconInactive: 'grid-outline' },
-      { id: 'kelas', label: 'Kelas', iconActive: 'book', iconInactive: 'book-outline' },
       { id: 'absensi', label: 'Absensi', iconActive: 'finger-print', iconInactive: 'finger-print' },
       { id: 'kantin', label: 'Kantin', iconActive: 'storefront', iconInactive: 'storefront-outline' },
       { id: 'history', label: 'History', iconActive: 'time', iconInactive: 'time-outline' },

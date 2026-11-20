@@ -102,6 +102,18 @@ router.post('/login', (req: Request, res: Response) => {
     found.role = 'admin';
   }
 
+  // Catat aktivitas login ke audit log
+  const loginLog = {
+    id: `aud_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
+    actor_id: found.id,
+    action: 'login',
+    target_type: 'user',
+    target_id: found.id,
+    details: { nama: found.nama, email: found.email, role: found.role },
+    timestamp: new Date().toISOString(),
+  };
+  db.auditLog.set(loginLog.id, loginLog);
+
   res.json({
     success: true,
     message: 'Login berhasil.',
@@ -146,6 +158,18 @@ router.post('/google', (req: Request, res: Response) => {
     res.status(403).json({ success: false, message: 'Akun dinonaktifkan. Hubungi Admin.' });
     return;
   }
+
+  // Catat aktivitas login google ke audit log
+  const loginLog = {
+    id: `aud_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
+    actor_id: found.id,
+    action: 'login',
+    target_type: 'user',
+    target_id: found.id,
+    details: { nama: found.nama, email: found.email, role: found.role, provider: 'google' },
+    timestamp: new Date().toISOString(),
+  };
+  db.auditLog.set(loginLog.id, loginLog);
 
   res.json({
     success: true,

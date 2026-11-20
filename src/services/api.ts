@@ -363,7 +363,25 @@ class SkitaApiClient {
       kelas?: { id: string; nama: string; tingkat: string | number } | null;
       classes?: Array<{ id: string; nama: string; tingkat: string | number }>;
       school?: { id: string; nama: string } | null;
+      schools?: Array<{ id: string; nama: string; jenjang?: string; member_count?: number; class_count?: number }>;
     }>('/api/monitoring/scope');
+  }
+
+  async getActivityHistory() {
+    return this.request<{
+      success: boolean;
+      history: Array<{
+        id: string;
+        tipe: 'absensi' | 'anggota' | 'kelas' | 'sekolah' | 'sistem';
+        judul: string;
+        deskripsi: string;
+        waktu: string;
+        timestamp: string;
+        icon: string;
+        iconColor: string;
+        iconBg: string;
+      }>;
+    }>('/api/monitoring/history');
   }
 
   // ── Delegasi Reset Password (FR-A16) ─────────────────────────────────────────
