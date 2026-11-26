@@ -35,7 +35,42 @@ function auditEntry(actor_id: string, action: string, target_type: string, targe
 function getOwnedSchool(userId: string, role: string) {
   if (role === 'admin') return null; // admin tidak punya 'sekolah milik'
   for (const cfg of db.schoolConfigs.values()) {
-    if (cfg.owner_user_id === userId) return cfg;
+    if (cfg.owner_user_id === userId || (cfg as any).claimed_by === userId) {
+      // Pastikan owner_user_id tersinkron
+      if (!cfg.owner_user_id) cfg.owner_user_id = userId;
+      return cfg;
+    }
+  }
+  // Fallback: akun sekolah yang bergabung lewat kode tapi belum punya cfg.owner_user_id
+  for (const m of db.schoolMemberships.values()) {
+    if (m.user_id === userId && m.status === 'aktif') {
+      const sch = db.schools.get(m.school_id);
+      if (!sch) continue;
+      let cfg = db.schoolConfigs.get(m.school_id);
+      if (!cfg) {
+        cfg = {
+          id: sch.id,
+          place_id: (sch as any).place_id ?? sch.id,
+          nama: sch.nama,
+          jenjang: sch.jenjang,
+          status: sch.status,
+          alamat: sch.alamat,
+          lat: sch.lat,
+          lng: sch.lng,
+          kecamatan: sch.kecamatan,
+          kelurahan: sch.kelurahan,
+          kota_kab: sch.kota_kab,
+          provinsi: sch.provinsi,
+          auto_approve_teacher: false,
+          owner_user_id: userId,
+          created_at: new Date().toISOString(),
+        };
+        db.schoolConfigs.set(sch.id, cfg);
+      } else if (!cfg.owner_user_id) {
+        cfg.owner_user_id = userId;
+      }
+      return cfg;
+    }
   }
   return null;
 }

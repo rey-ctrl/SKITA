@@ -110,13 +110,43 @@ router.post('/school', (req: AuthRequest, res: Response) => {
   db.schoolMemberships.set(membership.id, membership);
   persistSchoolMembership(membership);
 
-  // Update user.role jika membership aktif (KECUALI Admin agar tidak turun jadi murid/pelajar)
+  // Update user.role jika membership aktif (KECUALI Admin & Sekolah agar tidak turun jadi murid/guru)
   if (memberStatus === 'aktif') {
     const user = db.users.get(userId);
-    if (user && user.role !== 'admin') {
+    if (user && user.role !== 'admin' && user.role !== 'sekolah') {
       user.role = memberRole;
       user.updated_at = new Date().toISOString();
       db.users.set(userId, user);
+    }
+  }
+
+  // Jika akun role 'sekolah' bergabung ke sekolah, tautkan sekolah sebagai owner jika belum ada owner
+  if (req.user!.role === 'sekolah') {
+    let cfg = db.schoolConfigs.get(schoolId);
+    if (!cfg) {
+      const sch = db.schools.get(schoolId);
+      if (sch) {
+        cfg = {
+          id: sch.id,
+          place_id: (sch as any).place_id ?? sch.id,
+          nama: sch.nama,
+          jenjang: sch.jenjang,
+          status: sch.status,
+          alamat: sch.alamat,
+          lat: sch.lat,
+          lng: sch.lng,
+          kecamatan: sch.kecamatan,
+          kelurahan: sch.kelurahan,
+          kota_kab: sch.kota_kab,
+          provinsi: sch.provinsi,
+          auto_approve_teacher: false,
+          owner_user_id: userId,
+          created_at: new Date().toISOString(),
+        };
+        db.schoolConfigs.set(schoolId, cfg);
+      }
+    } else if (!cfg.owner_user_id) {
+      cfg.owner_user_id = userId;
     }
   }
 

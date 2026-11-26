@@ -131,9 +131,22 @@ class MemoryDatabase {
 
     // Konfigurasi sekolah seed
     this.schoolConfigs.set(seedSchool.id, {
-      school_id: seedSchool.id,
-      claimed_by: 'usr_sekolah_seed',
+      id: seedSchool.id,
+      place_id: (seedSchool as any).place_id ?? seedSchool.id,
+      nama: seedSchool.nama,
+      jenjang: seedSchool.jenjang,
+      status: seedSchool.status,
+      alamat: seedSchool.alamat,
+      lat: seedSchool.lat,
+      lng: seedSchool.lng,
+      kecamatan: seedSchool.kecamatan,
+      kelurahan: seedSchool.kelurahan,
+      kota_kab: seedSchool.kota_kab,
+      provinsi: seedSchool.provinsi,
       auto_approve_teacher: false,
+      owner_user_id: 'usr_sekolah_seed',
+      claimed_by: 'usr_sekolah_seed',
+      created_at: new Date().toISOString(),
     } as any);
 
     // Kelas seed
@@ -193,6 +206,16 @@ class MemoryDatabase {
       created_at: new Date().toISOString(),
     };
     this.users.set(muridUser.id, muridUser);
+
+    // Membership: Akun Sekolah
+    this.schoolMemberships.set('sm_sekolah_seed', {
+      id: 'sm_sekolah_seed',
+      user_id: sekolahUser.id,
+      school_id: seedSchool.id,
+      role: 'sekolah' as any,
+      status: 'aktif',
+      joined_at: new Date().toISOString(),
+    });
 
     // Membership: Guru join sekolah
     this.schoolMemberships.set('sm_guru_seed', {
