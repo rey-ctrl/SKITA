@@ -1362,7 +1362,6 @@ function ClassMemberView({
 }) {
   const [showAttendance, setShowAttendance] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
-  const [showTeacherMenu, setShowTeacherMenu] = useState(false);
   const [members, setMembers] = useState<Array<{ user_id: string; nama: string; nomor_absen: number; role: string }>>([]);
   const [loadingMembers, setLoadingMembers] = useState(false);
   const { user, userSchool, activeTab } = useApp();
@@ -1827,16 +1826,6 @@ function ClassMemberView({
           <View style={s.roleBadge}>
             <Text style={s.roleBadgeText}>{userRole.toUpperCase()}</Text>
           </View>
-          {/* Tombol + untuk Sekolah menggantikan filter */}
-          {userRole === 'sekolah' && (
-            <TouchableOpacity
-              style={s.teacherPlusBtn}
-              onPress={() => setShowTeacherMenu(true)}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="add" size={20} color="#ffffff" />
-            </TouchableOpacity>
-          )}
         </View>
       </View>
 
@@ -1911,67 +1900,6 @@ function ClassMemberView({
           <Text style={s.leaveClassBtnText}>Keluar dari Kelas</Text>
         </TouchableOpacity>
       )}
-
-      {/* Modal Manajemen Kelas Guru (Tombol +) */}
-      <Modal visible={showTeacherMenu} transparent animationType="fade" onRequestClose={() => setShowTeacherMenu(false)}>
-        <View style={s.modalOverlay}>
-          <View style={s.modalCard}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Text style={s.modalTitle}>Pilihan Ruang Kelas</Text>
-              <TouchableOpacity onPress={() => setShowTeacherMenu(false)} style={{ padding: 4 }}>
-                <Ionicons name="close" size={20} color="#64748b" />
-              </TouchableOpacity>
-            </View>
-
-            {/* Beralih Kelas */}
-            {availableClasses.length > 1 && (
-              <>
-                <Text style={[s.inputLabel, { marginTop: 12 }]}>Beralih Kelas ({availableClasses.length})</Text>
-                <ScrollView style={{ maxHeight: 160 }} nestedScrollEnabled>
-                  {availableClasses.map((ac) => {
-                    const isSelected = ac.id === classId;
-                    return (
-                      <TouchableOpacity
-                        key={ac.id}
-                        onPress={() => {
-                          if (onSelectClass && !isSelected) {
-                            onSelectClass({ id: ac.id, name: ac.nama });
-                            setShowTeacherMenu(false);
-                          }
-                        }}
-                        style={[s.switchClassItem, isSelected && s.switchClassItemActive]}
-                      >
-                        <Ionicons
-                          name={isSelected ? 'checkmark-circle' : 'book-outline'}
-                          size={16}
-                          color={isSelected ? '#047857' : '#64748b'}
-                        />
-                        <Text style={[s.switchClassText, isSelected && { fontWeight: '700', color: '#047857' }]}>
-                          {ac.nama}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-              </>
-            )}
-
-            {/* Tombol kembali ke Dashboard */}
-            {onBackToDashboard && (
-              <TouchableOpacity
-                style={[s.outlineBtn, { marginTop: 12 }]}
-                onPress={() => {
-                  setShowTeacherMenu(false);
-                  onBackToDashboard();
-                }}
-              >
-                <Ionicons name="arrow-back" size={14} color="#374151" />
-                <Text style={s.outlineBtnText}>Ke Dashboard Sekolah</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
-      </Modal>
 
       {/* Modal Absensi */}
       <AttendanceModal
