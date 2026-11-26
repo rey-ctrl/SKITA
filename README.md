@@ -1,16 +1,26 @@
 # SKITA — Sistem Kemudahan Informasi & Titik Akses Sekolah
 
-Aplikasi mobile React Native (Expo) untuk membantu orang tua dan calon peserta didik mencari sekolah, mengecek zonasi PPDB, dan melihat profil sekolah secara interaktif.
+Aplikasi mobile React Native (Expo) untuk manajemen sekolah digital: guru, murid, kelas, absensi, dan penugasan dalam satu platform.
 
 ## Fitur
 
-- **Peta interaktif** — cari dan lihat lokasi sekolah di sekitar kamu
-- **Cek zonasi** — evaluasi apakah rumahmu masuk zona suatu sekolah (radius, wilayah, atau gabungan)
-- **Search On-the-Fly** — cari sekolah berdasarkan nama, kecamatan, atau jenjang secara real-time
-- **Detail sekolah** — profil lengkap: kapasitas kelas, fasilitas, kuota PPDB
-- **Filter & sort** — saring berdasarkan jenjang, jarak, dan kuota tersisa
-- **Autentikasi** — login akun atau lanjut sebagai tamu
-- **Profil pengguna** — simpan lokasi rumah dan preferensi pencarian
+- **Manajemen Kelas** — sekolah membuat kelas, guru & murid bergabung lewat kode akses
+- **Kode Akses** — kode murid, kode guru, dan kode kelas; bisa disalin (copy) dan dirotasi otomatis tiap Senin
+- **Absensi Digital** — murid isi kehadiran mandiri (07.00–09.00 WIB), guru verifikasi & koreksi kapan saja
+- **Penugasan** — guru buat tugas dengan batas waktu, murid kumpulkan jawaban berupa dokumen/foto
+- **Riwayat Aktivitas** — log audit absensi, kelas, dan sekolah per akun
+- **Multi-Role** — Admin, Sekolah, Guru, Murid; hak akses dikontrol di server
+- **Peta Interaktif** — cari dan lihat lokasi sekolah (OSRM routing)
+- **Profil Pengguna** — data akademik, ringkasan presensi
+
+## Role & Hak Akses
+
+| Role | Kemampuan Utama |
+|---|---|
+| **Admin** | Kelola semua akun, pantau semua sekolah & kelas |
+| **Sekolah** | Buat kode akses, buat kelas, setujui guru, bubarkan kelas |
+| **Guru** | Kelola absensi & penugasan di kelas yang diikuti |
+| **Murid** | Isi kehadiran, kumpulkan tugas, lihat riwayat absensi |
 
 ## Tech Stack
 
@@ -21,6 +31,8 @@ Aplikasi mobile React Native (Expo) untuk membantu orang tua dan calon peserta d
 | Peta | WebView + OSRM (routing) |
 | Backend | Express + PostgreSQL + JWT |
 | Auth | bcryptjs + jsonwebtoken |
+| Clipboard | expo-clipboard |
+| File | expo-document-picker + expo-image-picker |
 
 ## Struktur Repo
 
@@ -73,24 +85,22 @@ npm run build && npm start  # Production
 ### Test
 
 ```bash
-# Unit test zonasi (mobile)
+# Unit test mobile
 npm test
 
 # Unit test API (backend)
 cd server && npm test
 ```
 
-## Cara Kerja Zonasi
+## Alur Bergabung
 
-Evaluasi zonasi mendukung tiga tipe:
+1. **Murid** — masukkan kode sekolah → masukkan kode kelas → langsung aktif
+2. **Guru** — masukkan kode guru sekolah → tunggu persetujuan (atau otomatis jika diaktifkan sekolah) → masukkan kode kelas
+3. Kode dirotasi otomatis setiap Senin 00:00 WIB
 
-| Tipe | Logika |
-|---|---|
-| `radius` | Jarak Haversine rumah ke sekolah ≤ batas radius |
-| `wilayah` | Kecamatan pengguna ada dalam daftar wilayah zonasi |
-| `gabungan` | Radius OR wilayah (salah satu terpenuhi) |
+## Pembubaran Kelas
 
-> Hasil bersifat estimasi. Keputusan resmi mengikuti ketentuan dinas pendidikan / sekolah setempat.
+Sekolah/Admin bisa menjadwalkan pembubaran kelas dengan masa tunggu 24 jam. Selama masa tunggu KBM tetap berjalan; setelah selesai semua murid ditandai `lulus` periode dan guru keluar dari kelas (keanggotaan sekolah tetap).
 
 ## Environment Variables (Backend)
 

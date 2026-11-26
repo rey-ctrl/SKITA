@@ -164,7 +164,7 @@ const s = StyleSheet.create({
   filterChipText: { fontSize: 12, fontWeight: '600', color: '#475569' },
   filterChipTextActive: { color: '#ffffff' },
 
-  menuList: { padding: 14, gap: 10, paddingBottom: 32 },
+  menuList: { padding: 14, gap: 10, paddingBottom: 80 },
   menuCard: {
     flexDirection: 'row',
     alignItems: 'center',

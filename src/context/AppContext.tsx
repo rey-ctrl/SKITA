@@ -50,6 +50,12 @@ interface AppContextType {
   activeClass: { id: string; name: string; schoolName: string } | null;
   availableClasses: Array<{ id: string; nama: string; tingkat?: string | number }>;
   lastAccessedClassId: string | null;
+  teacherSubjects: Array<{ id: string; nama: string }>;
+  isTeacherSubjectsLocked: boolean;
+  autoApproveTeacher: boolean;
+  refreshTeacherSubjects: () => Promise<void>;
+  saveTeacherSubjects: (subjectIds: string[]) => Promise<void>;
+  setAutoApproveTeacher: (val: boolean) => void;
   // Actions
   setActiveTab: (tab: TabType) => void;
   setSelectedSchool: (school: School | null) => void;
@@ -136,6 +142,46 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [activeClass, setActiveClass] = useState<{ id: string; name: string; schoolName: string } | null>(null);
   const [availableClasses, setAvailableClasses] = useState<Array<{ id: string; nama: string; tingkat?: string | number }>>([]);
   const [lastAccessedClassId, setLastAccessedClassId] = useState<string | null>(null);
+
+  // 7b. Mata pelajaran guru (FR-A3)
+  const [teacherSubjects, setTeacherSubjectsState] = useState<Array<{ id: string; nama: string }>>([]);
+  const [isTeacherSubjectsLocked, setIsTeacherSubjectsLocked] = useState(false);
+  const [autoApproveTeacher, setAutoApproveTeacher] = useState(false);
+
+  const refreshTeacherSubjects = async () => {
+    if (!userSchool?.id || user?.role !== 'guru') return;
+    try {
+      const tRes = await apiClient.getTeacherSubjects(userSchool.id, user!.id);
+      if (tRes.teacher_subjects && tRes.teacher_subjects.length > 0) {
+        const mapped = tRes.teacher_subjects.map((ts: any) => ({
+          id: ts.subject_id,
+          nama: ts.subject?.nama || ts.subject_id,
+        }));
+        setTeacherSubjectsState(mapped);
+        setIsTeacherSubjectsLocked(true);
+      }
+    } catch {}
+  };
+
+  const saveTeacherSubjects = async (subjectIds: string[]) => {
+    if (!userSchool?.id) return;
+    try {
+      await apiClient.setTeacherSubjects(userSchool.id, { subject_ids: subjectIds });
+    } catch {}
+    // Ambil nama dari availableSchoolSubjects tidak ada di context, set sementara dari ID
+    // akan di-refresh oleh pemanggil
+    setIsTeacherSubjectsLocked(subjectIds.length > 0);
+  };
+
+  // Refresh mapel guru saat userSchool atau user berubah
+  useEffect(() => {
+    if (user?.role === 'guru' && userSchool?.id) {
+      refreshTeacherSubjects();
+    } else {
+      setTeacherSubjectsState([]);
+      setIsTeacherSubjectsLocked(false);
+    }
+  }, [user?.role, userSchool?.id]);
 
   const refreshMembershipScope = async () => {
     try {
@@ -371,6 +417,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         activeClass,
         availableClasses,
         lastAccessedClassId,
+        teacherSubjects,
+        isTeacherSubjectsLocked,
+        autoApproveTeacher,
+        refreshTeacherSubjects,
+        saveTeacherSubjects,
+        setAutoApproveTeacher,
         setActiveTab,
         setSelectedSchool,
         setMapTargetSchool,

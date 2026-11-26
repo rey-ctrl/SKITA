@@ -230,19 +230,84 @@ export const AuthScreen: React.FC = () => {
             )}
           </TouchableOpacity>
 
-          {/* Shortcut Admin Seed */}
+          {/* Shortcut Akun Seed (Sekolah, Guru, Murid, Admin) */}
           {mode === 'login' && (
-            <TouchableOpacity
-              style={styles.adminShortcutBtn}
-              onPress={() => {
-                setEmail('admin@skita.id');
-                setPassword('Admin@2026!');
-              }}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="shield-checkmark-outline" size={14} color="#dc2626" />
-              <Text style={styles.adminShortcutText}>Gunakan Akun Admin Seed (admin@skita.id)</Text>
-            </TouchableOpacity>
+            <View style={styles.seedSection}>
+              <View style={styles.seedHeader}>
+                <Ionicons name="flash-outline" size={13} color="#047857" />
+                <Text style={styles.seedSectionTitle}>Akun Seed / Demo Cepat:</Text>
+              </View>
+
+              <View style={styles.seedGrid}>
+                {/* Seed Sekolah */}
+                <TouchableOpacity
+                  style={[styles.seedCard, { backgroundColor: '#ecfdf5', borderColor: '#a7f3d0' }]}
+                  onPress={() => {
+                    setEmail('sekolah@skita.id');
+                    setPassword('Sekolah@2026!');
+                    setErrorMsg(null);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="school" size={14} color="#047857" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.seedRole, { color: '#065f46' }]}>Akun Sekolah</Text>
+                    <Text style={styles.seedEmail} numberOfLines={1}>sekolah@skita.id</Text>
+                  </View>
+                </TouchableOpacity>
+
+                {/* Seed Guru */}
+                <TouchableOpacity
+                  style={[styles.seedCard, { backgroundColor: '#eff6ff', borderColor: '#bfdbfe' }]}
+                  onPress={() => {
+                    setEmail('guru@skita.id');
+                    setPassword('Guru@2026!');
+                    setErrorMsg(null);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="person" size={14} color="#1d4ed8" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.seedRole, { color: '#1e40af' }]}>Akun Guru</Text>
+                    <Text style={styles.seedEmail} numberOfLines={1}>guru@skita.id</Text>
+                  </View>
+                </TouchableOpacity>
+
+                {/* Seed Murid */}
+                <TouchableOpacity
+                  style={[styles.seedCard, { backgroundColor: '#fef3c7', borderColor: '#fde68a' }]}
+                  onPress={() => {
+                    setEmail('murid@skita.id');
+                    setPassword('Murid@2026!');
+                    setErrorMsg(null);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="book" size={14} color="#b45309" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.seedRole, { color: '#92400e' }]}>Akun Murid</Text>
+                    <Text style={styles.seedEmail} numberOfLines={1}>murid@skita.id</Text>
+                  </View>
+                </TouchableOpacity>
+
+                {/* Seed Admin */}
+                <TouchableOpacity
+                  style={[styles.seedCard, { backgroundColor: '#fef2f2', borderColor: '#fecaca' }]}
+                  onPress={() => {
+                    setEmail('admin@skita.id');
+                    setPassword('Admin@2026!');
+                    setErrorMsg(null);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="shield-checkmark" size={14} color="#dc2626" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.seedRole, { color: '#991b1b' }]}>Admin SKITA</Text>
+                    <Text style={styles.seedEmail} numberOfLines={1}>admin@skita.id</Text>
+                  </View>
+                </TouchableOpacity>
+              </View>
+            </View>
           )}
         </View>
 
@@ -431,22 +496,44 @@ const styles = StyleSheet.create({
     color: '#047857',
     fontWeight: '600',
   },
-  adminShortcutBtn: {
+  seedSection: {
+    marginTop: 16,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+    gap: 8,
+  },
+  seedHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 5,
+  },
+  seedSectionTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#047857',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  seedGrid: {
     gap: 6,
-    marginTop: 12,
-    paddingVertical: 8,
+  },
+  seedCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 7,
     paddingHorizontal: 10,
-    backgroundColor: '#fef2f2',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#fecaca',
-    justifyContent: 'center',
   },
-  adminShortcutText: {
+  seedRole: {
     fontSize: 11,
-    color: '#dc2626',
-    fontWeight: '600',
+    fontWeight: '700',
+  },
+  seedEmail: {
+    fontSize: 10,
+    color: '#64748b',
+    marginTop: 0.5,
   },
 });

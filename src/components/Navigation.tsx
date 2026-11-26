@@ -34,7 +34,7 @@ export const Navigation: React.FC = () => {
 
   const profileSekolahTab: TabItem = {
     id: 'profil_sekolah',
-    label: 'Profil Sekolah',
+    label: 'Profil',
     iconActive: 'person-circle',
     iconInactive: 'person-circle-outline',
   };
@@ -66,21 +66,19 @@ export const Navigation: React.FC = () => {
       profileUmumTab,
     ];
   } else if (isAdmin) {
-    // 3. Admin saat akses modul sekolah:
-    // Tab Beranda & Cari tidak ada di bottom bar sekolah (Beranda di Header atas, Cari di navigasi umum).
+    // 3. Admin saat akses modul sekolah (FR-A1)
     tabs = [
       { id: 'dashboard', label: 'Dashboard', iconActive: 'grid', iconInactive: 'grid-outline' },
-      { id: 'absensi', label: 'Absensi', iconActive: 'finger-print', iconInactive: 'finger-print' },
+      { id: 'kelas', label: 'Kelas', iconActive: 'book', iconInactive: 'book-outline' },
       { id: 'kantin', label: 'Kantin', iconActive: 'storefront', iconInactive: 'storefront-outline' },
       { id: 'history', label: 'History', iconActive: 'time', iconInactive: 'time-outline' },
       profileSekolahTab,
     ];
   } else if (isGuru) {
-    // 4. Guru saat akses modul sekolah:
-    // Tab Beranda tidak ada di bottom bar (ada di Header atas).
+    // 4. Guru saat akses modul sekolah (FR-A3)
     tabs = [
       { id: 'dashboard', label: 'Dashboard', iconActive: 'grid', iconInactive: 'grid-outline' },
-      { id: 'absensi', label: 'Absensi', iconActive: 'finger-print', iconInactive: 'finger-print' },
+      { id: 'kelas', label: 'Kelas', iconActive: 'book', iconInactive: 'book-outline' },
       { id: 'kantin', label: 'Kantin', iconActive: 'storefront', iconInactive: 'storefront-outline' },
       { id: 'history', label: 'History', iconActive: 'time', iconInactive: 'time-outline' },
       profileSekolahTab,
@@ -93,17 +91,18 @@ export const Navigation: React.FC = () => {
       profileSekolahTab,
     ];
   } else if (isMurid && activeClass) {
-    // 6. Murid sudah di dalam kelas: hanya modul kelas, absensi, kantin (Beranda di Header atas)
+    // 6. Murid sudah di dalam kelas: modul kelas, absensi, kantin, profil (Beranda di Header atas)
     tabs = [
       { id: 'kelas', label: 'Kelas', iconActive: 'book', iconInactive: 'book-outline' },
       { id: 'absensi', label: 'Absensi', iconActive: 'finger-print', iconInactive: 'finger-print' },
       { id: 'kantin', label: 'Kantin', iconActive: 'storefront', iconInactive: 'storefront-outline' },
+      profileSekolahTab,
     ];
   } else if (isMurid && !activeClass) {
     // 7. Murid di sekolah, belum masuk kelas
     tabs = [
       { id: 'dashboard', label: 'Dashboard', iconActive: 'grid', iconInactive: 'grid-outline' },
-      { id: 'sekolah', label: 'Kelas', iconActive: 'book', iconInactive: 'book-outline' },
+      { id: 'kelas', label: 'Kelas', iconActive: 'book', iconInactive: 'book-outline' },
       profileSekolahTab,
     ];
   } else {
@@ -123,7 +122,7 @@ export const Navigation: React.FC = () => {
   }, [role, userSchool?.id, activeClass?.id]);
 
   return (
-    <View style={[styles.navBar, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+    <View style={[styles.navBar, { paddingBottom: Math.max(insets.bottom, 8) }]}>
       {tabs.map((tab) => {
         const isActive = activeTab === tab.id;
         return (
@@ -133,16 +132,17 @@ export const Navigation: React.FC = () => {
             style={styles.tabItem}
             activeOpacity={0.7}
           >
-            <View style={[styles.iconContainer, isActive && styles.iconContainerActive]}>
+            <View style={styles.iconContainer}>
               <Ionicons
                 name={isActive ? tab.iconActive : tab.iconInactive}
                 size={22}
-                color={isActive ? '#047857' : '#94a3b8'}
+                color={isActive ? '#047857' : '#64748b'}
               />
             </View>
-            <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]}>
+            <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]} numberOfLines={1}>
               {tab.label}
             </Text>
+            {isActive && <View style={styles.activeDot} />}
           </TouchableOpacity>
         );
       })}
@@ -155,13 +155,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     backgroundColor: '#ffffff',
     borderTopWidth: 1,
-    borderTopColor: '#e2e8f0',
-    paddingTop: 8,
+    borderTopColor: '#f1f5f9',
+    paddingTop: 6,
     paddingHorizontal: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
     elevation: 8,
   },
   tabItem: {
@@ -169,22 +169,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 2,
+    paddingHorizontal: 2,
+    minHeight: 46,
+    minWidth: 0,
   },
   iconContainer: {
-    padding: 4,
-    borderRadius: 8,
-  },
-  iconContainerActive: {
-    backgroundColor: '#ecfdf5',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 2,
   },
   tabLabel: {
-    fontSize: 10,
-    fontWeight: '500',
-    color: '#94a3b8',
+    fontSize: 9.5,
+    fontWeight: '600',
+    color: '#64748b',
     marginTop: 2,
+    letterSpacing: -0.3,
+    textAlign: 'center',
   },
   tabLabelActive: {
     color: '#047857',
     fontWeight: '700',
+  },
+  activeDot: {
+    width: 3.5,
+    height: 3.5,
+    borderRadius: 2,
+    backgroundColor: '#047857',
+    marginTop: 2,
   },
 });

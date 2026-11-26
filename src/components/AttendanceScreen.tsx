@@ -208,7 +208,7 @@ export const AttendanceScreen: React.FC = () => {
               <View style={{ flex: 1 }}>
                 <Text style={s.cardTitle}>Presensi Mandiri Hari Ini</Text>
                 <Text style={s.cardDesc}>
-                  Kelas: {activeClass?.name || 'Kelas Terdaftar'} · Batas 07.00–09.00 WIB
+                  Kelas: {activeClass?.name || 'Kelas Terdaftar'} · Mode Demo (Bisa Absen Kapan Saja)
                 </Text>
               </View>
             </View>
@@ -252,10 +252,28 @@ export const AttendanceScreen: React.FC = () => {
           ) : (
             myHistory.map((rec) => (
               <View key={rec.id || rec.tanggal} style={s.historyRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.historyDate}>{rec.tanggal}</Text>
-                  <Text style={s.historyClass}>{rec.class_name}</Text>
+                <View style={s.historyRowLeft}>
+                  <View style={[s.historyStatusIcon, { backgroundColor: STATUS_BG[rec.status] }]}>
+                    <Ionicons
+                      name={
+                        rec.status === 'hadir'
+                          ? 'checkmark-circle'
+                          : rec.status === 'sakit'
+                          ? 'medkit'
+                          : rec.status === 'izin'
+                          ? 'document-text'
+                          : 'close-circle'
+                      }
+                      size={15}
+                      color={STATUS_COLOR[rec.status]}
+                    />
+                  </View>
+                  <View>
+                    <Text style={s.historyDate}>{rec.tanggal}</Text>
+                    <Text style={s.historyClass}>{rec.class_name}</Text>
+                  </View>
                 </View>
+
                 <View style={[s.pill, { backgroundColor: STATUS_BG[rec.status] }]}>
                   <Text style={[s.pillText, { color: STATUS_COLOR[rec.status] }]}>
                     {STATUS_LABEL[rec.status]}
@@ -273,7 +291,7 @@ export const AttendanceScreen: React.FC = () => {
           {/* Selector Kelas */}
           <View style={s.classSelectorBar}>
             <Text style={s.selectorLabel}>
-              {role === 'admin' ? 'Pilih Kelas Sekolah:' : 'Kelas yang Diajar:'}
+              {role === 'admin' ? 'Pilih Kelas:' : 'Kelas yang Diajar:'}
             </Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 4 }}>
               {availableClasses.map((cls) => {
@@ -326,7 +344,7 @@ export const AttendanceScreen: React.FC = () => {
               <FlatList
                 data={classRecords}
                 keyExtractor={(item) => item.murid_id}
-                contentContainerStyle={{ paddingBottom: 32, gap: 8 }}
+                contentContainerStyle={{ paddingBottom: 80, gap: 8 }}
                 renderItem={({ item }) => (
                   <TouchableOpacity
                     style={s.studentRow}
@@ -487,11 +505,30 @@ const s = StyleSheet.create({
   historyRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     backgroundColor: '#ffffff',
-    borderRadius: 9,
+    borderRadius: 12,
     padding: 12,
     borderWidth: 1,
     borderColor: '#e2e8f0',
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  historyRowLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  historyStatusIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   historyDate: { fontSize: 13, fontWeight: '700', color: '#1e293b' },
   historyClass: { fontSize: 11, color: '#64748b', marginTop: 1 },
@@ -559,7 +596,7 @@ const s = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
@@ -569,29 +606,34 @@ const s = StyleSheet.create({
     width: '100%',
     maxWidth: 380,
     backgroundColor: '#ffffff',
-    borderRadius: 14,
-    padding: 16,
-    gap: 8,
+    borderRadius: 20,
+    padding: 20,
+    gap: 10,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
   },
-  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  modalTitle: { fontSize: 14, fontWeight: '700', color: '#0f172a' },
-  inputLabel: { fontSize: 11, fontWeight: '600', color: '#475569' },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 },
+  modalTitle: { fontSize: 16, fontWeight: '700', color: '#0f172a' },
+  inputLabel: { fontSize: 12, fontWeight: '600', color: '#475569' },
   statusOptionsRow: { flexDirection: 'row', gap: 6, marginVertical: 4 },
-  statusOptionBtn: { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 8, borderWidth: 1 },
-  statusOptionText: { fontSize: 11, fontWeight: '700' },
+  statusOptionBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 10, borderWidth: 1 },
+  statusOptionText: { fontSize: 12, fontWeight: '700' },
   noteInput: {
     borderWidth: 1,
     borderColor: '#cbd5e1',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    fontSize: 12,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 13,
     color: '#0f172a',
     backgroundColor: '#f8fafc',
   },
   saveKoreksiBtn: {
     backgroundColor: '#047857',
-    paddingVertical: 10,
+    paddingVertical: 12,
     alignItems: 'center',
     borderRadius: 8,
     marginTop: 8,

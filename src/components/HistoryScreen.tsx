@@ -41,7 +41,6 @@ export const HistoryScreen: React.FC = () => {
 
   const filterOptions = [
     { id: 'semua', label: 'Semua' },
-    { id: 'anggota', label: 'Login & Akun' },
     { id: 'kelas', label: 'Kelas' },
     { id: 'absensi', label: 'Presensi' },
     { id: 'sekolah', label: 'Sekolah' },
@@ -51,41 +50,21 @@ export const HistoryScreen: React.FC = () => {
     try {
       const res = await apiClient.getActivityHistory();
       if (res.history && res.history.length > 0) {
-        setHistory(res.history as any);
+        // Exclude aktivitas login jika ada yang tersisa dari cache/server lama
+        const nonLogin = (res.history as any[]).filter(
+          (h) => h.icon !== 'log-in' && !h.judul?.toLowerCase().includes('login')
+        );
+        setHistory(nonLogin);
       } else {
-        // Fallback default jika baru pertama kali login
-        setHistory([
-          {
-            id: 'h_login_now',
-            tipe: 'anggota',
-            judul: 'Sesi Login Terverifikasi',
-            deskripsi: `Pengguna ${user?.nama || 'Akun'} berhasil login ke sistem sebagai ${user?.role || 'pengguna'}.`,
-            waktu: 'Baru saja',
-            icon: 'log-in',
-            iconColor: '#1d4ed8',
-            iconBg: '#dbeafe',
-          },
-        ]);
+        setHistory([]);
       }
     } catch {
-      // Fallback sesi lokal
-      setHistory([
-        {
-          id: 'h_login_now',
-          tipe: 'anggota',
-          judul: 'Sesi Login Terverifikasi',
-          deskripsi: `Pengguna ${user?.nama || 'Akun'} aktif di aplikasi.`,
-          waktu: 'Baru saja',
-          icon: 'log-in',
-          iconColor: '#1d4ed8',
-          iconBg: '#dbeafe',
-        },
-      ]);
+      setHistory([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [user]);
+  }, []);
 
   useEffect(() => {
     loadHistory();
@@ -119,28 +98,6 @@ export const HistoryScreen: React.FC = () => {
         <TouchableOpacity onPress={onRefresh} style={{ padding: 4 }}>
           <Ionicons name="refresh" size={16} color="#ffffff" />
         </TouchableOpacity>
-      </View>
-
-      {/* Card Informasi Akun Login Saat Ini */}
-      <View style={s.accountCard}>
-        <View style={s.accountHeader}>
-          <View style={s.avatarCircle}>
-            <Ionicons name="person" size={20} color="#ffffff" />
-          </View>
-          <View style={{ flex: 1 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Text style={s.accountName}>{user?.nama || 'Pengguna'}</Text>
-              <View style={s.roleBadge}>
-                <Text style={s.roleBadgeText}>{(user?.role || 'pengguna').toUpperCase()}</Text>
-              </View>
-            </View>
-            <Text style={s.accountEmail}>{user?.email || 'email@skita.id'}</Text>
-          </View>
-          <View style={s.activeSessionBadge}>
-            <View style={s.activeDot} />
-            <Text style={s.activeSessionText}>Sesi Aktif</Text>
-          </View>
-        </View>
       </View>
 
       {/* Filter Tabs */}
@@ -209,7 +166,7 @@ export const HistoryScreen: React.FC = () => {
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
-  contentContainer: { padding: 14, gap: 12, paddingBottom: 32 },
+  contentContainer: { padding: 14, gap: 12, paddingBottom: 80 },
   banner: {
     flexDirection: 'row',
     alignItems: 'center',

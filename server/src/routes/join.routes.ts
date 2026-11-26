@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { db } from '../db/store.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { SchoolMembership, ClassMembership, AuditLog } from '../types/index.js';
+import { persistSchoolMembership, persistClassMembership, persistAuditLog } from '../db/postgres.js';
 
 const router = Router();
 router.use(authMiddleware);
@@ -68,12 +69,23 @@ router.post('/school', (req: AuthRequest, res: Response) => {
     return;
   }
 
-  const existing = [...db.schoolMemberships.values()].find(
-    (m) => m.user_id === userId && m.school_id === schoolId && m.status === 'aktif',
+  // Cegah duplikasi / spam keanggotaan sekolah untuk user yang sama
+  const existingAny = [...db.schoolMemberships.values()].find(
+    (m) => m.user_id === userId && m.school_id === schoolId,
   );
-  if (existing) {
-    res.status(409).json({ success: false, message: 'Sudah menjadi anggota sekolah ini.' });
-    return;
+
+  if (existingAny) {
+    if (existingAny.status === 'aktif') {
+      res.status(409).json({ success: false, message: 'Sudah menjadi anggota aktif sekolah ini.' });
+      return;
+    }
+    if (existingAny.status === 'pending') {
+      res.status(409).json({
+        success: false,
+        message: 'Permintaan bergabung sedang menunggu persetujuan sekolah. Tidak perlu mendaftar ulang.',
+      });
+      return;
+    }
   }
 
   // ponytail: schoolConfigs mungkin kosong — fallback auto_approve_teacher: false
@@ -83,16 +95,20 @@ router.post('/school', (req: AuthRequest, res: Response) => {
   const memberRole = isStudent ? 'murid' : 'guru';
   const memberStatus = isStudent ? 'aktif' : (autoApprove ? 'aktif' : 'pending');
 
+  // Pakai ulang ID jika sebelumnya berstatus keluar/dikeluarkan agar 1 user = 1 baris
+  const membershipId = existingAny ? existingAny.id : `sm_${Date.now()}`;
   const membership: SchoolMembership = {
-    id: `sm_${Date.now()}`,
+    id: membershipId,
     user_id: userId,
     school_id: schoolId,
     role: memberRole,
     status: memberStatus,
     joined_at: new Date().toISOString(),
+    left_at: undefined,
   };
 
   db.schoolMemberships.set(membership.id, membership);
+  persistSchoolMembership(membership);
 
   // Update user.role jika membership aktif (KECUALI Admin agar tidak turun jadi murid/pelajar)
   if (memberStatus === 'aktif') {
@@ -234,6 +250,7 @@ router.post('/class', (req: AuthRequest, res: Response) => {
   };
 
   db.classMemberships.set(membership.id, membership);
+  persistClassMembership(membership);
 
   const log = auditEntry(userId, 'join_class', 'class_membership', membership.id, {
     class_id: classId,
@@ -241,6 +258,7 @@ router.post('/class', (req: AuthRequest, res: Response) => {
     period_id: period.id,
   });
   db.auditLog.set(log.id, log);
+  persistAuditLog(log);
 
   res.status(201).json({
     success: true,

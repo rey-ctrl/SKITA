@@ -229,6 +229,8 @@ Kelas tidak ditutup karena akan dipakai angkatan di bawahnya. Yang diakhiri hany
 - Absensi hanya membaca tabel lokal, tidak memanggil API pihak ketiga saat murid mengisi.
 - **Acceptance:** response API murid tidak mengandung field catatan. Request pengisian untuk murid lain, di luar jendela waktu, atau di hari non-sekolah ditolak server.
 
+admin jika mengakses sekolah maka terlihat semua rows sekolah dari semua sekolah yang sudah memiliki anggota tapi tetap untuk kelas akan langsung bisa dilihat rows nya jikalau sudah ditambahkan kelasnya oleh akun sekolah atau admin walaupun belum ada anggotanya
+
 ### FR-A14 (P2) Mode demo untuk Admin
 
 - Akses penuh Admin ke konten tugas dan jawaban hanya berlaku di **mode demo**.
@@ -305,3 +307,5 @@ Kelas tidak ditutup karena akan dipakai angkatan di bawahnya. Yang diakhiri hany
 6. Hari kerja default Senin sampai Jumat, bisa diubah per sekolah. `isSchoolDay()` wajib membaca `school.work_days` dari DB, bukan hardcode.
 7. Daftar tanggal merah mengikuti SKB Tiga Menteri tiap tahun. Perubahan mendadak ditangani admin lewat tabel.
 8. Google auth tidak memverifikasi token di sisi server saat ini. Sebelum production, integrasi `google-auth-library` wajib diaktifkan.
+
+

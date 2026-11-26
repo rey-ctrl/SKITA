@@ -286,7 +286,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   listContent: {
-    paddingBottom: 20,
+    paddingBottom: 80,
   },
   emptyContainer: {
     backgroundColor: '#ffffff',

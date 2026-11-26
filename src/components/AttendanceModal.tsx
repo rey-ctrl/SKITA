@@ -134,7 +134,7 @@ function StudentView({ classId }: { classId: string }) {
       {/* Tombol isi hadir hari ini */}
       <View style={s.card}>
         <Text style={s.cardTitle}>Absensi Hari Ini</Text>
-        <Text style={s.hint}>Waktu pengisian: 07.00 – 09.00 WIB</Text>
+        <Text style={s.hint}>Waktu pengisian: Mode Demo (Bisa Absen Kapan Saja)</Text>
         <TouchableOpacity
           style={[s.primaryBtn, submitted && s.disabledBtn]}
           onPress={handleSelf}

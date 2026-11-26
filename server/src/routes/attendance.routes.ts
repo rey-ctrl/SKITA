@@ -1,8 +1,9 @@
 import { Router, Response } from 'express';
 import { db } from '../db/store.js';
 import { authMiddleware, requireRole, AuthRequest } from '../middleware/auth.js';
-import { Attendance, AttendanceAudit } from '../types/index.js';
+import { Attendance, AttendanceAudit, ClassMembership, ClassPeriod } from '../types/index.js';
 import { getJakartaTime, isSchoolDay, isWithinAttendanceWindow } from '../utils/calendar.js';
+import { persistAttendance, persistAttendanceAudit, persistPeriod, persistClassMembership } from '../db/postgres.js';
 
 const router = Router();
 router.use(authMiddleware);
@@ -79,14 +80,15 @@ router.get('/class/:class_id', (req: AuthRequest, res: Response) => {
 
 // --------------------------------------------------------------------------
 // POST /api/attendance/self
-// FR-A13: Murid isi absensi sendiri (hanya 'hadir'), 07.00-09.00 WIB, hari sekolah
-// Murid tidak bisa mengisi sakit atau izin sendiri
+// FR-A13: Murid / Pengguna isi absensi mandiri (hanya 'hadir')
+// DEMO MODE: Jendela waktu, hari libur, & role dilepaskan agar bisa diuji kapan saja
 // --------------------------------------------------------------------------
-router.post('/self', requireRole('murid'), (req: AuthRequest, res: Response) => {
+router.post('/self', requireRole('murid', 'pengguna'), async (req: AuthRequest, res: Response) => {
   const userId = req.user!.userId;
   const now = getJakartaTime();
 
-  // Cek jendela waktu (FR-A13: harus 07.00–09.00 WIB)
+  // Mode Demo: Jendela waktu 07.00-09.00 WIB & Hari sekolah dilepas agar penguji bisa demo kapan saja.
+  /*
   if (!isWithinAttendanceWindow({ hours: now.hours, minutes: now.minutes })) {
     res.status(403).json({
       success: false,
@@ -94,12 +96,41 @@ router.post('/self', requireRole('murid'), (req: AuthRequest, res: Response) => 
     });
     return;
   }
+  */
 
   // Cari kelas aktif murid
-  const classId = getActiveClassForStudent(userId);
+  let classId = getActiveClassForStudent(userId);
   if (!classId) {
-    res.status(400).json({ success: false, message: 'Belum terdaftar di kelas mana pun.' });
-    return;
+    const firstClass = [...db.classes.values()][0];
+    if (firstClass) {
+      classId = firstClass.id;
+      let pId = getActivePeriodForClass(firstClass.id);
+      if (!pId) {
+        const newPeriod: ClassPeriod = {
+          id: `prd_auto_${Date.now()}`,
+          class_id: firstClass.id,
+          start_date: new Date().toISOString(),
+          is_active: true,
+        };
+        db.periods.set(newPeriod.id, newPeriod);
+        await persistPeriod(newPeriod);
+        pId = newPeriod.id;
+      }
+      const demoMembership: ClassMembership = {
+        id: `cm_demo_${Date.now()}`,
+        class_id: firstClass.id,
+        period_id: pId,
+        user_id: userId,
+        role: 'murid',
+        status: 'aktif',
+        joined_at: new Date().toISOString(),
+      };
+      db.classMemberships.set(demoMembership.id, demoMembership);
+      await persistClassMembership(demoMembership);
+    } else {
+      res.status(400).json({ success: false, message: 'Belum terdaftar di kelas mana pun.' });
+      return;
+    }
   }
 
   const kelas = db.classes.get(classId);
@@ -108,20 +139,17 @@ router.post('/self', requireRole('murid'), (req: AuthRequest, res: Response) => 
     return;
   }
 
-  // Cek hari sekolah (FR-A13)
-  const schoolDayCheck = isSchoolDay(kelas.school_id, now.dateString, now.dayOfWeek);
-  if (!schoolDayCheck.isSchoolDay) {
-    res.status(403).json({
-      success: false,
-      message: `Hari ini bukan hari sekolah (${schoolDayCheck.reason || 'libur'}). Absensi tidak dibuka.`,
-    });
-    return;
-  }
-
-  const periodId = getActivePeriodForClass(classId);
+  let periodId: string = getActivePeriodForClass(classId) || '';
   if (!periodId) {
-    res.status(400).json({ success: false, message: 'Tidak ada periode aktif di kelas ini.' });
-    return;
+    const newPeriod: ClassPeriod = {
+      id: `prd_auto_${Date.now()}`,
+      class_id: classId,
+      start_date: new Date().toISOString(),
+      is_active: true,
+    };
+    db.periods.set(newPeriod.id, newPeriod);
+    await persistPeriod(newPeriod);
+    periodId = newPeriod.id;
   }
 
   // Cek duplikat (satu murid satu record per tanggal per kelas)
@@ -149,6 +177,7 @@ router.post('/self', requireRole('murid'), (req: AuthRequest, res: Response) => 
     is_koreksi_guru: false,
   };
   db.attendance.set(record.id, record);
+  await persistAttendance(record);
 
   res.status(201).json({ success: true, message: 'Absensi berhasil dicatat.', attendance: record });
 });
@@ -158,7 +187,7 @@ router.post('/self', requireRole('murid'), (req: AuthRequest, res: Response) => 
 // FR-A13: Guru isi atau koreksi absensi murid (hadir/sakit/izin/alpa + catatan)
 // Kapan saja pada hari sekolah. TIDAK bisa di hari non-sekolah.
 // --------------------------------------------------------------------------
-router.post('/guru', requireRole('guru'), (req: AuthRequest, res: Response) => {
+router.post('/guru', requireRole('guru', 'admin'), async (req: AuthRequest, res: Response) => {
   const userId = req.user!.userId;
   const { murid_id, class_id, date, status, catatan } = req.body as {
     murid_id: string;
@@ -187,7 +216,8 @@ router.post('/guru', requireRole('guru'), (req: AuthRequest, res: Response) => {
 
   const targetDate = date || getJakartaTime().dateString;
 
-  // Cek hari sekolah (FR-A13: guru tidak bisa isi di hari non-sekolah)
+  // Mode Demo: Validasi hari non-sekolah dilepaskan agar guru/admin bisa menginput absensi demo kapan saja
+  /*
   const [y, m, d] = targetDate.split('-').map(Number);
   const dowTarget = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
   const schoolDayCheck = isSchoolDay(kelas.school_id, targetDate, dowTarget);
@@ -198,12 +228,14 @@ router.post('/guru', requireRole('guru'), (req: AuthRequest, res: Response) => {
     });
     return;
   }
+  */
 
-  // FR-A13: Guru hanya bisa isi kelas yang ia join (cek di server)
+  // FR-A13: Guru hanya bisa isi kelas yang ia join (Admin bypass)
+  const isReqAdmin = req.user!.role === 'admin';
   const guruCm = [...db.classMemberships.values()].find(
     (c) => c.user_id === userId && c.class_id === class_id && c.role === 'guru' && c.status === 'aktif'
   );
-  if (!guruCm) {
+  if (!isReqAdmin && !guruCm) {
     res.status(403).json({ success: false, message: 'Guru tidak terdaftar di kelas ini.' });
     return;
   }
@@ -240,6 +272,7 @@ router.post('/guru', requireRole('guru'), (req: AuthRequest, res: Response) => {
       catatan_sesudah: catatan,
     };
     db.attendanceAudit.set(audit.id, audit);
+    await persistAttendanceAudit(audit);
 
     existing.status = status;
     existing.catatan = catatan;
@@ -247,6 +280,7 @@ router.post('/guru', requireRole('guru'), (req: AuthRequest, res: Response) => {
     existing.waktu_isi = new Date().toISOString();
     existing.is_koreksi_guru = true;
     db.attendance.set(existing.id, existing);
+    await persistAttendance(existing);
 
     res.json({
       success: true,
@@ -271,6 +305,7 @@ router.post('/guru', requireRole('guru'), (req: AuthRequest, res: Response) => {
     is_koreksi_guru: true,
   };
   db.attendance.set(record.id, record);
+  await persistAttendance(record);
 
   res.status(201).json({
     success: true,

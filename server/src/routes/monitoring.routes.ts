@@ -19,33 +19,14 @@ router.get('/scope', (req: AuthRequest, res: Response) => {
   const role = user ? user.role : req.user!.role;
 
   if (role === 'admin') {
-    // Sekolah yang memiliki anggota, kelas, atau diklaim oleh akun sekolah
-    const schoolsWithMembers = new Set([
-      ...[...db.schoolMemberships.values()].map((m) => m.school_id),
-      ...[...db.classes.values()].map((c) => c.school_id),
-      ...[...db.schoolConfigs.values()].map((sc) => sc.id),
-    ]);
-
-    let activeSchools = [...db.schools.values()]
-      .filter((s) => schoolsWithMembers.has(s.id))
-      .map((s) => ({
-        id: s.id,
-        nama: s.nama,
-        jenjang: s.jenjang,
-        member_count: [...db.schoolMemberships.values()].filter((m) => m.school_id === s.id).length,
-        class_count: [...db.classes.values()].filter((c) => c.school_id === s.id).length,
-      }));
-
-    // Fallback jika belum ada sekolah dengan anggota/kelas: tampilkan semua sekolah
-    if (activeSchools.length === 0) {
-      activeSchools = [...db.schools.values()].map((s) => ({
-        id: s.id,
-        nama: s.nama,
-        jenjang: s.jenjang,
-        member_count: 0,
-        class_count: 0,
-      }));
-    }
+    // Admin melihat SEMUA sekolah terdaftar di sistem beserta jumlah kelas dan anggotanya
+    const allSchools = [...db.schools.values()].map((s) => ({
+      id: s.id,
+      nama: s.nama,
+      jenjang: s.jenjang,
+      member_count: [...db.schoolMemberships.values()].filter((m) => m.school_id === s.id).length,
+      class_count: [...db.classes.values()].filter((c) => c.school_id === s.id).length,
+    }));
 
     const allClasses = [...db.classes.values()].map((c) => ({
       id: c.id,
@@ -57,11 +38,11 @@ router.get('/scope', (req: AuthRequest, res: Response) => {
     res.json({
       success: true,
       role: 'admin',
-      school: activeSchools[0] || null,
-      schools: activeSchools,
+      school: allSchools[0] || null,
+      schools: allSchools,
       classes: allClasses,
       scope: {
-        schools: activeSchools,
+        schools: allSchools,
         classes: allClasses,
       },
     });
@@ -263,6 +244,7 @@ router.get('/history', (req: AuthRequest, res: Response) => {
   // Format menjadi history items
   const history = logs
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+    .filter((l) => l.action !== 'login' && l.action !== 'login_google')
     .map((l) => {
       let judul = 'Aktivitas Sistem';
       let tipe = 'sistem';

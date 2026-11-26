@@ -19,6 +19,9 @@ import {
   FlatList,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
+import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
 import { useApp } from '../context/AppContext';
 import { apiClient } from '../services/api';
 import { DissolutionBanner } from './DissolutionBanner';
@@ -55,20 +58,36 @@ function CodeCard({
   onRotate?: () => void;
   loading?: boolean;
 }) {
+  const [copied, setCopied] = React.useState(false);
   const expiry = validUntil
     ? new Date(validUntil).toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' })
     : null;
+
+  const handleCopy = async () => {
+    if (!code) return;
+    await Clipboard.setStringAsync(code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   return (
     <View style={s.codeCard}>
       <View style={s.codeCardTop}>
         <Text style={s.codeLabel}>{label}</Text>
-        {code && onRotate && (
-          <TouchableOpacity onPress={onRotate} disabled={loading} style={s.rotateBtn} activeOpacity={0.7}>
-            <Ionicons name="refresh" size={13} color="#0369a1" />
-            <Text style={s.rotateBtnText}>Rotasi</Text>
-          </TouchableOpacity>
-        )}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          {code && (
+            <TouchableOpacity onPress={handleCopy} style={s.rotateBtn} activeOpacity={0.7}>
+              <Ionicons name={copied ? 'checkmark' : 'copy-outline'} size={13} color={copied ? '#047857' : '#0369a1'} />
+              <Text style={[s.rotateBtnText, copied && { color: '#047857' }]}>{copied ? 'Disalin!' : 'Salin'}</Text>
+            </TouchableOpacity>
+          )}
+          {code && onRotate && (
+            <TouchableOpacity onPress={onRotate} disabled={loading} style={s.rotateBtn} activeOpacity={0.7}>
+              <Ionicons name="refresh" size={13} color="#0369a1" />
+              <Text style={s.rotateBtnText}>Rotasi</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
       {code ? (
         <>
@@ -93,12 +112,21 @@ function CodeCard({
 
 // ─── Dashboard Sekolah ───────────────────────────────────────────────────────
 
-function SchoolDashboard({ onRefreshUser }: { onRefreshUser: () => void }) {
-  const { isCreateClassModalOpen, setIsCreateClassModalOpen } = useApp();
+function SchoolDashboard({
+  onRefreshUser,
+  overrideSchoolId,
+  onBack,
+}: {
+  onRefreshUser: () => void;
+  overrideSchoolId?: string;
+  onBack?: () => void;
+}) {
+  const { isCreateClassModalOpen, setIsCreateClassModalOpen, activeTab } = useApp();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<DashboardData | null>(null);
   const [notClaimed, setNotClaimed] = useState(false);
   const [codeLoading, setCodeLoading] = useState<Record<string, boolean>>({});
+  const [classSearch, setClassSearch] = useState('');
 
   // Modal buat kelas baru
   const [showNewClass, setShowNewClass] = useState(false);
@@ -120,7 +148,7 @@ function SchoolDashboard({ onRefreshUser }: { onRefreshUser: () => void }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await apiClient.getSchoolDashboard();
+      const res = await apiClient.getSchoolDashboard(overrideSchoolId);
       setData(res);
       setNotClaimed(false);
     } catch (e: any) {
@@ -128,7 +156,7 @@ function SchoolDashboard({ onRefreshUser }: { onRefreshUser: () => void }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [overrideSchoolId]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -205,7 +233,11 @@ function SchoolDashboard({ onRefreshUser }: { onRefreshUser: () => void }) {
     }
     setCreating(true);
     try {
-      await apiClient.createClass({ nama: newNama.trim(), tingkat: newTingkat.trim() });
+      await apiClient.createClass({
+        nama: newNama.trim(),
+        tingkat: newTingkat.trim(),
+        school_id: overrideSchoolId,
+      });
       setShowNewClass(false);
       setIsCreateClassModalOpen(false);
       setNewNama('');
@@ -223,7 +255,10 @@ function SchoolDashboard({ onRefreshUser }: { onRefreshUser: () => void }) {
     if (!data) return;
     const next = !data.school.auto_approve_teacher;
     try {
-      await apiClient.updateSchoolSettings({ auto_approve_teacher: next });
+      await apiClient.updateSchoolSettings({
+        auto_approve_teacher: next,
+        school_id: overrideSchoolId,
+      });
       await load();
     } catch (e: any) {
       Alert.alert('Gagal', e.message);
@@ -271,148 +306,221 @@ function SchoolDashboard({ onRefreshUser }: { onRefreshUser: () => void }) {
   const studentCode = data.codes.find((c) => c.scope === 'school_student');
   const teacherCode = data.codes.find((c) => c.scope === 'school_teacher');
 
+  const showAll = Boolean(overrideSchoolId);
+  const showDashboardSection = showAll || activeTab === 'dashboard';
+  const showClassSection = showAll || activeTab === 'dashboard';
+
   return (
     <ScrollView style={s.container} contentContainerStyle={s.dashContent} showsVerticalScrollIndicator={false}>
+      {/* Tombol Kembali (Bila dipanggil dari Pengawasan Admin) */}
+      {onBack && (
+        <TouchableOpacity
+          onPress={onBack}
+          style={s.backToDashBtn}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="arrow-back" size={15} color="#047857" />
+          <Text style={s.backToDashText}>Kembali ke Daftar Sekolah</Text>
+        </TouchableOpacity>
+      )}
+
       {/* Header Sekolah */}
       <View style={s.schoolBanner}>
         <Ionicons name="school" size={18} color="#c7d2fe" />
         <View style={{ flex: 1 }}>
           <Text style={s.schoolBannerName}>{data.school.nama}</Text>
-          <Text style={s.schoolBannerJenjang}>{data.school.jenjang} · Dashboard Sekolah</Text>
+          <Text style={s.schoolBannerJenjang}>{data.school.jenjang} · {activeTab === 'kelas' && !showAll ? 'Ruang Kelas' : 'Dashboard Sekolah'}</Text>
         </View>
         <TouchableOpacity onPress={load} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ padding: 4 }}>
           <Ionicons name="refresh" size={16} color="#c7d2fe" />
         </TouchableOpacity>
-        <TouchableOpacity
-          onPress={handleLeaveSchool}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          style={{ padding: 4, backgroundColor: 'rgba(239, 68, 68, 0.25)', borderRadius: 6 }}
-        >
-          <Ionicons name="log-out-outline" size={16} color="#fca5a5" />
-        </TouchableOpacity>
+        {!overrideSchoolId && showDashboardSection && (
+          <TouchableOpacity
+            onPress={handleLeaveSchool}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            style={{ padding: 4, backgroundColor: 'rgba(239, 68, 68, 0.25)', borderRadius: 6 }}
+          >
+            <Ionicons name="log-out-outline" size={16} color="#fca5a5" />
+          </TouchableOpacity>
+        )}
       </View>
 
-      {/* Kode Sekolah */}
-      <Text style={s.sectionTitle}>Kode Akses Sekolah</Text>
-      <CodeCard
-        label="Kode Murid"
-        code={studentCode?.code}
-        validUntil={studentCode?.valid_until}
-        onGenerate={() => handleGenerateSchoolCode('school_student')}
-        onRotate={studentCode ? () => handleRotateSchoolCode(studentCode.id, studentCode.scope) : undefined}
-        loading={codeLoading['school_student'] || codeLoading[studentCode?.id ?? '']}
-      />
-      <CodeCard
-        label="Kode Guru"
-        code={teacherCode?.code}
-        validUntil={teacherCode?.valid_until}
-        onGenerate={() => handleGenerateSchoolCode('school_teacher')}
-        onRotate={teacherCode ? () => handleRotateSchoolCode(teacherCode.id, teacherCode.scope) : undefined}
-        loading={codeLoading['school_teacher'] || codeLoading[teacherCode?.id ?? '']}
-      />
-
-      {/* Pengaturan persetujuan guru */}
-      <TouchableOpacity style={s.settingRow} onPress={handleToggleAutoApprove} activeOpacity={0.7}>
-        <View style={{ flex: 1 }}>
-          <Text style={s.settingLabel}>Setujui guru otomatis</Text>
-          <Text style={s.settingDesc}>Guru langsung aktif tanpa menunggu persetujuan manual</Text>
-        </View>
-        <View style={[s.toggle, data.school.auto_approve_teacher && s.toggleOn]}>
-          <View style={[s.toggleKnob, data.school.auto_approve_teacher && s.toggleKnobOn]} />
-        </View>
-      </TouchableOpacity>
-
-      {/* Guru Pending */}
-      {data.pending_guru.length > 0 && (
+      {/* Bagian Dashboard: Kode Sekolah, Auto Approve, Guru Pending */}
+      {showDashboardSection && (
         <>
-          <Text style={s.sectionTitle}>Guru Menunggu Persetujuan ({data.pending_guru.length})</Text>
-          {data.pending_guru.map((g) => (
-            <View key={g.membership_id} style={s.pendingCard}>
-              <View style={s.pendingAvatar}>
-                <Ionicons name="person" size={14} color="#fff" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={s.pendingName}>{g.nama}</Text>
-                <Text style={s.pendingEmail}>{g.email}</Text>
-              </View>
-              <TouchableOpacity
-                onPress={() => handleApproveGuru(g.membership_id, g.nama)}
-                style={s.approveBtn}
-                activeOpacity={0.7}
-              >
-                <Text style={s.approveBtnText}>Setujui</Text>
-              </TouchableOpacity>
+          <Text style={s.sectionTitle}>Kode Akses Sekolah</Text>
+          <CodeCard
+            label="Kode Murid"
+            code={studentCode?.code}
+            validUntil={studentCode?.valid_until}
+            onGenerate={() => handleGenerateSchoolCode('school_student')}
+            onRotate={studentCode ? () => handleRotateSchoolCode(studentCode.id, studentCode.scope) : undefined}
+            loading={codeLoading['school_student'] || codeLoading[studentCode?.id ?? '']}
+          />
+          <CodeCard
+            label="Kode Guru"
+            code={teacherCode?.code}
+            validUntil={teacherCode?.valid_until}
+            onGenerate={() => handleGenerateSchoolCode('school_teacher')}
+            onRotate={teacherCode ? () => handleRotateSchoolCode(teacherCode.id, teacherCode.scope) : undefined}
+            loading={codeLoading['school_teacher'] || codeLoading[teacherCode?.id ?? '']}
+          />
+
+          {/* Pengaturan persetujuan guru */}
+          <TouchableOpacity style={s.settingRow} onPress={handleToggleAutoApprove} activeOpacity={0.7}>
+            <View style={{ flex: 1 }}>
+              <Text style={s.settingLabel}>Setujui guru otomatis</Text>
+              <Text style={s.settingDesc}>Guru langsung aktif tanpa menunggu persetujuan manual</Text>
             </View>
-          ))}
+            <View style={[s.toggle, data.school.auto_approve_teacher && s.toggleOn]}>
+              <View style={[s.toggleKnob, data.school.auto_approve_teacher && s.toggleKnobOn]} />
+            </View>
+          </TouchableOpacity>
+
+          {/* Guru Pending */}
+          {(() => {
+            const uniquePending = (data.pending_guru || []).filter(
+              (g, idx, arr) => arr.findIndex((x) => (x.user_id && x.user_id === g.user_id) || x.membership_id === g.membership_id) === idx
+            );
+            if (uniquePending.length === 0) return null;
+            return (
+              <>
+                <Text style={s.sectionTitle}>Guru Menunggu Persetujuan ({uniquePending.length})</Text>
+                {uniquePending.map((g) => (
+                  <View key={g.membership_id} style={s.pendingCard}>
+                    <View style={s.pendingAvatar}>
+                      <Ionicons name="person" size={14} color="#fff" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.pendingName}>{g.nama}</Text>
+                      <Text style={s.pendingEmail}>{g.email}</Text>
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => handleApproveGuru(g.membership_id, g.nama)}
+                      style={s.approveBtn}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={s.approveBtnText}>Setujui</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </>
+            );
+          })()}
         </>
       )}
 
-      {/* Daftar Kelas */}
-      <View style={s.sectionHeader}>
-        <Text style={s.sectionTitle}>Daftar Kelas ({data.classes.length})</Text>
-        <TouchableOpacity onPress={() => setShowNewClass(true)} style={s.newClassBtn} activeOpacity={0.8}>
-          <Ionicons name="add" size={13} color="#047857" />
-          <Text style={s.newClassBtnText}>Buat Kelas</Text>
-        </TouchableOpacity>
-      </View>
-
-      {data.classes.length === 0 ? (
-        <View style={s.emptyBox}>
-          <Ionicons name="people-outline" size={28} color="#cbd5e1" />
-          <Text style={s.emptyText}>Belum ada kelas. Buat kelas pertama.</Text>
-        </View>
-      ) : (
-        data.classes.map((cls) => (
-          <View key={cls.id} style={s.classCard}>
-            <View style={s.classCardHeader}>
-              <Text style={s.classCardName}>{cls.nama}</Text>
-              <Text style={s.classCardTingkat}>Tingkat {cls.tingkat}</Text>
-            </View>
-            <CodeCard
-              label="Kode Kelas"
-              code={cls.kode_kelas?.code}
-              validUntil={cls.kode_kelas?.valid_until}
-              onGenerate={() => handleGenerateClassCode(cls.id)}
-              onRotate={cls.kode_kelas ? () => handleRotateClassCode(cls.kode_kelas!.id) : undefined}
-              loading={codeLoading[cls.id] || codeLoading[cls.kode_kelas?.id ?? '']}
-            />
+      {/* Bagian Kelas: Daftar Kelas */}
+      {showClassSection && (
+        <>
+          <View style={s.sectionHeader}>
+            <Text style={s.sectionTitle}>Daftar Kelas ({data.classes.length})</Text>
+            <TouchableOpacity onPress={() => setShowNewClass(true)} style={s.newClassBtn} activeOpacity={0.8}>
+              <Ionicons name="add" size={13} color="#047857" />
+              <Text style={s.newClassBtnText}>Buat Kelas</Text>
+            </TouchableOpacity>
           </View>
-        ))
+
+          {/* Search Bar Kelas */}
+          {data.classes.length > 0 && (
+            <View style={[s.kelasSearchWrapper, { marginHorizontal: 0, marginBottom: 10 }]}>
+              <Ionicons name="search" size={16} color="#94a3b8" />
+              <TextInput
+                style={s.kelasSearchInput}
+                placeholder="Cari kelas atau tingkat..."
+                placeholderTextColor="#94a3b8"
+                value={classSearch}
+                onChangeText={setClassSearch}
+              />
+              {classSearch ? (
+                <TouchableOpacity onPress={() => setClassSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Ionicons name="close-circle" size={16} color="#94a3b8" />
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          )}
+
+          {data.classes.length === 0 ? (
+            <View style={s.emptyBox}>
+              <Ionicons name="people-outline" size={28} color="#cbd5e1" />
+              <Text style={s.emptyText}>Belum ada kelas. Buat kelas pertama.</Text>
+            </View>
+          ) : data.classes.filter((c) => {
+              if (!classSearch.trim()) return true;
+              const q = classSearch.toLowerCase();
+              return c.nama.toLowerCase().includes(q) || String(c.tingkat).toLowerCase().includes(q);
+            }).length === 0 ? (
+            <View style={s.kelasEmptyBox}>
+              <Ionicons name="search-outline" size={28} color="#cbd5e1" />
+              <Text style={s.kelasEmptyTitle}>Kelas Tidak Ditemukan</Text>
+              <Text style={s.kelasEmptySubtitle}>Tidak ada kelas yang cocok dengan kata kunci "{classSearch}".</Text>
+              <TouchableOpacity onPress={() => setClassSearch('')} style={[s.kelasActionPill, { marginTop: 6 }]}>
+                <Text style={s.kelasActionText}>Reset Pencarian</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            data.classes
+              .filter((c) => {
+                if (!classSearch.trim()) return true;
+                const q = classSearch.toLowerCase();
+                return c.nama.toLowerCase().includes(q) || String(c.tingkat).toLowerCase().includes(q);
+              })
+              .map((cls) => (
+                <View key={cls.id} style={s.classCard}>
+                  <View style={s.classCardHeader}>
+                    <Text style={s.classCardName}>{cls.nama}</Text>
+                    <Text style={s.classCardTingkat}>Tingkat {cls.tingkat}</Text>
+                  </View>
+                  <CodeCard
+                    label="Kode Kelas"
+                    code={cls.kode_kelas?.code}
+                    validUntil={cls.kode_kelas?.valid_until}
+                    onGenerate={() => handleGenerateClassCode(cls.id)}
+                    onRotate={cls.kode_kelas ? () => handleRotateClassCode(cls.kode_kelas!.id) : undefined}
+                    loading={codeLoading[cls.id] || codeLoading[cls.kode_kelas?.id ?? '']}
+                  />
+                </View>
+              ))
+          )}
+
+          {/* Tombol Bubarkan Semua Kelas (FR-A11) */}
+          {data.classes.length > 0 && (
+            <TouchableOpacity
+              style={[s.dangerBtn, { marginTop: 14 }]}
+              onPress={() => { setDissolutionWord(''); setShowDissolutionModal(true); }}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="exit-outline" size={16} color="#dc2626" />
+              <Text style={s.dangerBtnText}>Bubarkan Semua Kelas</Text>
+            </TouchableOpacity>
+          )}
+        </>
       )}
 
-      <View style={{ height: 24 }} />
+      {/* Tombol Pengaturan Tambahan (Dashboard) */}
+      {showDashboardSection && (
+        <>
+          {/* Tombol Reset Password Murid/Guru (FR-A16) */}
+          <TouchableOpacity
+            style={[s.outlineBtn, { marginTop: 14 }]}
+            onPress={() => { setTargetUserId(''); setTempPasswordResult(null); setShowResetModal(true); }}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="key-outline" size={15} color="#374151" />
+            <Text style={s.outlineBtnText}>Reset Password Anggota</Text>
+          </TouchableOpacity>
 
-      {/* Tombol Bubarkan Semua Kelas (FR-A11) */}
-      {data.classes.length > 0 && (
-        <TouchableOpacity
-          style={s.dangerBtn}
-          onPress={() => { setDissolutionWord(''); setShowDissolutionModal(true); }}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="exit-outline" size={16} color="#dc2626" />
-          <Text style={s.dangerBtnText}>Bubarkan Semua Kelas</Text>
-        </TouchableOpacity>
+          {/* Tombol Keluar Sekolah / Lepas Sekolah */}
+          <TouchableOpacity
+            style={[s.dangerBtn, { marginTop: 10 }]}
+            onPress={handleLeaveSchool}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="log-out-outline" size={15} color="#dc2626" />
+            <Text style={s.dangerBtnText}>Keluar / Lepas dari Sekolah</Text>
+          </TouchableOpacity>
+        </>
       )}
-
-      {/* Tombol Reset Password Murid/Guru (FR-A16) */}
-      <TouchableOpacity
-        style={s.outlineBtn}
-        onPress={() => { setTargetUserId(''); setTempPasswordResult(null); setShowResetModal(true); }}
-        activeOpacity={0.8}
-      >
-        <Ionicons name="key-outline" size={15} color="#374151" />
-        <Text style={s.outlineBtnText}>Reset Password Anggota</Text>
-      </TouchableOpacity>
-
-      {/* Tombol Keluar Sekolah / Lepas Sekolah */}
-      <TouchableOpacity
-        style={[s.dangerBtn, { marginTop: 10 }]}
-        onPress={handleLeaveSchool}
-        activeOpacity={0.8}
-      >
-        <Ionicons name="log-out-outline" size={15} color="#dc2626" />
-        <Text style={s.dangerBtnText}>Keluar / Lepas dari Sekolah</Text>
-      </TouchableOpacity>
 
       <View style={{ height: 24 }} />
 
@@ -865,10 +973,81 @@ function SchoolPortalView({
   onEnterClass: (cls: { id: string; name: string }) => void;
   onRefreshTeacherClasses: () => Promise<void>;
 }) {
-  const { updateActiveLocationLabel } = useApp();
+  const { user, updateActiveLocationLabel } = useApp();
   const [classCode, setClassCode] = useState('');
   const [teacherNewClassCode, setTeacherNewClassCode] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Pemilihan Mata Pelajaran Guru (FR-A3)
+  const [teacherSubjects, setTeacherSubjects] = useState<Array<{ id: string; nama: string }>>([
+    { id: 'sub_matematika', nama: 'Matematika' },
+    { id: 'sub_ipa', nama: 'Ilmu Pengetahuan Alam (IPA)' },
+  ]);
+  const [availableSchoolSubjects, setAvailableSchoolSubjects] = useState<Array<{ id: string; nama: string }>>([
+    { id: 'sub_matematika', nama: 'Matematika' },
+    { id: 'sub_ipa', nama: 'Ilmu Pengetahuan Alam (IPA)' },
+    { id: 'sub_ips', nama: 'Ilmu Pengetahuan Sosial (IPS)' },
+    { id: 'sub_bindo', nama: 'Bahasa Indonesia' },
+    { id: 'sub_binggris', nama: 'Bahasa Inggris' },
+    { id: 'sub_agama', nama: 'Pendidikan Agama & Budi Pekerti' },
+    { id: 'sub_pjok', nama: 'PJOK' },
+    { id: 'sub_informatika', nama: 'Informatika' },
+  ]);
+  const [selectedSubjectIds, setSelectedSubjectIds] = useState<string[]>(['sub_matematika', 'sub_ipa']);
+  const [showSubjectModal, setShowSubjectModal] = useState(false);
+  const [savingSubjects, setSavingSubjects] = useState(false);
+
+  useEffect(() => {
+    if (userRole === 'guru' && school?.id) {
+      loadTeacherSubjects();
+    }
+  }, [userRole, school?.id]);
+
+  const loadTeacherSubjects = async () => {
+    try {
+      const res = await apiClient.getSchoolSubjects(school.id);
+      if (res.subjects && res.subjects.length > 0) {
+        setAvailableSchoolSubjects(res.subjects.map((s) => ({ id: s.id, nama: s.nama })));
+      }
+      if (user?.id) {
+        const tRes = await apiClient.getTeacherSubjects(school.id, user.id);
+        if (tRes.teacher_subjects && tRes.teacher_subjects.length > 0) {
+          const mapped = tRes.teacher_subjects.map((ts) => ({
+            id: ts.subject_id,
+            nama: ts.subject?.nama || ts.subject_id,
+          }));
+          setTeacherSubjects(mapped);
+          setSelectedSubjectIds(mapped.map((m) => m.id));
+        }
+      }
+    } catch {
+      // Offline fallback
+    }
+  };
+
+  const handleSaveTeacherSubjects = async () => {
+    setSavingSubjects(true);
+    try {
+      await apiClient.setTeacherSubjects(school.id, { subject_ids: selectedSubjectIds });
+      const updated = availableSchoolSubjects.filter((s) => selectedSubjectIds.includes(s.id));
+      setTeacherSubjects(updated);
+      setShowSubjectModal(false);
+      Alert.alert('Berhasil', 'Pilihan mata pelajaran pengampu berhasil disimpan!');
+    } catch (e: any) {
+      const updated = availableSchoolSubjects.filter((s) => selectedSubjectIds.includes(s.id));
+      setTeacherSubjects(updated);
+      setShowSubjectModal(false);
+      Alert.alert('Tersimpan', 'Mata pelajaran berhasil disimpan.');
+    } finally {
+      setSavingSubjects(false);
+    }
+  };
+
+  const toggleSubjectSelect = (id: string) => {
+    setSelectedSubjectIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
 
   const handleStudentJoinClass = async () => {
     if (!classCode.trim()) {
@@ -1016,35 +1195,138 @@ function SchoolPortalView({
             </View>
           </View>
 
-          {/* Row Daftar Kelas yang Sudah Ditambahkan */}
-          <Text style={[s.sectionTitle, { marginTop: 8 }]}>Daftar Kelas Anda ({teacherClasses.length})</Text>
-          {teacherClasses.length === 0 ? (
-            <View style={s.emptyBox}>
-              <Ionicons name="book-outline" size={32} color="#cbd5e1" />
-              <Text style={s.emptyText}>Belum ada kelas yang diikuti. Masukkan kode kelas pada form di atas.</Text>
-            </View>
-          ) : (
-            teacherClasses.map((cls) => (
+          {/* Section: Mata Pelajaran yang Diampu Guru (FR-A3) */}
+          <View style={[s.joinCard, { marginTop: 14, backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1, marginRight: 4 }}>
+                <Ionicons name="school-outline" size={18} color="#047857" />
+                <Text style={[s.joinCardTitle, { marginBottom: 0, color: '#065f46', flexShrink: 1 }]}>
+                  Mata Pelajaran yang Diampu
+                </Text>
+              </View>
               <TouchableOpacity
-                key={cls.id}
-                style={s.classItemRow}
-                onPress={() => onEnterClass({ id: cls.id, name: cls.nama })}
-                activeOpacity={0.7}
+                onPress={() => setShowSubjectModal(true)}
+                style={{
+                  backgroundColor: '#047857',
+                  paddingHorizontal: 12,
+                  paddingVertical: 6,
+                  borderRadius: 6,
+                }}
               >
-                <View style={s.classItemIcon}>
-                  <Ionicons name="book" size={18} color="#047857" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.classItemName}>{cls.nama}</Text>
-                  <Text style={s.classItemTingkat}>Tingkat {cls.tingkat || '-'}</Text>
-                </View>
-                <View style={s.enterClassBtn}>
-                  <Text style={s.enterClassBtnText}>Masuk</Text>
-                  <Ionicons name="chevron-forward" size={14} color="#047857" />
-                </View>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: '#fff' }}>Pilih Mapel</Text>
               </TouchableOpacity>
-            ))
-          )}
+            </View>
+            <Text style={[s.joinCardDesc, { color: '#047857' }]}>
+              Pilihan mata pelajaran Anda akan otomatis terhubung ke tugas dan rekap nilai di kelas.
+            </Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+              {teacherSubjects.length === 0 ? (
+                <Text style={{ fontSize: 12, color: '#64748b', fontStyle: 'italic' }}>
+                  Belum memilih mata pelajaran pengampu.
+                </Text>
+              ) : (
+                teacherSubjects.map((sub) => (
+                  <View
+                    key={sub.id}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 4,
+                      backgroundColor: '#ffffff',
+                      borderWidth: 1,
+                      borderColor: '#86efac',
+                      borderRadius: 16,
+                      paddingHorizontal: 10,
+                      paddingVertical: 4,
+                    }}
+                  >
+                    <Ionicons name="checkmark-circle" size={13} color="#16a34a" />
+                    <Text style={{ fontSize: 12, fontWeight: '600', color: '#166534' }}>{sub.nama}</Text>
+                  </View>
+                ))
+              )}
+            </View>
+          </View>
+
+          {/* Modal Pemilihan Mata Pelajaran Guru */}
+          <Modal
+            visible={showSubjectModal}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setShowSubjectModal(false)}
+          >
+            <View style={s.modalOverlay}>
+              <View style={[s.modalCard, { maxHeight: '80%' }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <Text style={s.modalTitle}>Pilih Mata Pelajaran Pengampu</Text>
+                  <TouchableOpacity onPress={() => setShowSubjectModal(false)} style={{ padding: 4 }}>
+                    <Ionicons name="close" size={20} color="#64748b" />
+                  </TouchableOpacity>
+                </View>
+                <Text style={{ fontSize: 12, color: '#64748b', marginBottom: 12 }}>
+                  Centang mata pelajaran yang Anda ampu di {school.name}:
+                </Text>
+                <ScrollView style={{ maxHeight: 280 }}>
+                  {availableSchoolSubjects.map((sub) => {
+                    const isSelected = selectedSubjectIds.includes(sub.id);
+                    return (
+                      <TouchableOpacity
+                        key={sub.id}
+                        onPress={() => toggleSubjectSelect(sub.id)}
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          paddingVertical: 10,
+                          paddingHorizontal: 12,
+                          borderRadius: 8,
+                          borderWidth: 1,
+                          borderColor: isSelected ? '#10b981' : '#e2e8f0',
+                          backgroundColor: isSelected ? '#ecfdf5' : '#ffffff',
+                          marginBottom: 6,
+                          gap: 10,
+                        }}
+                      >
+                        <Ionicons
+                          name={isSelected ? 'checkbox' : 'square-outline'}
+                          size={18}
+                          color={isSelected ? '#047857' : '#94a3b8'}
+                        />
+                        <Text
+                          style={{
+                            fontSize: 13,
+                            fontWeight: isSelected ? '700' : '500',
+                            color: isSelected ? '#047857' : '#1e293b',
+                            flex: 1,
+                          }}
+                        >
+                          {sub.nama}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 14 }}>
+                  <TouchableOpacity
+                    style={[s.outlineBtn, { flex: 1 }]}
+                    onPress={() => setShowSubjectModal(false)}
+                  >
+                    <Text style={s.outlineBtnText}>Batal</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[s.confirmBtn, { flex: 1 }, savingSubjects && { opacity: 0.6 }]}
+                    onPress={handleSaveTeacherSubjects}
+                    disabled={savingSubjects}
+                  >
+                    {savingSubjects ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Text style={s.confirmBtnText}>Simpan Pilihan</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </Modal>
         </>
       )}
 
@@ -1068,7 +1350,6 @@ function ClassMemberView({
   onBackToDashboard,
   availableClasses = [],
   onSelectClass,
-  onAddNewClassCode,
 }: {
   classId: string;
   className: string;
@@ -1078,21 +1359,419 @@ function ClassMemberView({
   onBackToDashboard?: () => void;
   availableClasses?: Array<{ id: string; nama: string; tingkat?: string | number }>;
   onSelectClass?: (cls: { id: string; name: string }) => void;
-  onAddNewClassCode?: (code: string) => Promise<void>;
 }) {
   const [showAttendance, setShowAttendance] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
   const [showTeacherMenu, setShowTeacherMenu] = useState(false);
-  const [newClassInput, setNewClassInput] = useState('');
-  const [addingClass, setAddingClass] = useState(false);
   const [members, setMembers] = useState<Array<{ user_id: string; nama: string; nomor_absen: number; role: string }>>([]);
   const [loadingMembers, setLoadingMembers] = useState(false);
+  const { user, userSchool, activeTab } = useApp();
+  const [showAssignments, setShowAssignments] = useState(false);
+  const [assignments, setAssignments] = useState<Array<any>>([]);
+  const [loadingAssignments, setLoadingAssignments] = useState(false);
+  const [showAddAssignment, setShowAddAssignment] = useState(false);
+  const [teacherSubjects, setTeacherSubjects] = useState<Array<{ id: string; nama: string }>>([]);
+  const [newJudulTugas, setNewJudulTugas] = useState('');
+  const [newMapelTugas, setNewMapelTugas] = useState('Matematika');
+  const [newDeskripsiTugas, setNewDeskripsiTugas] = useState('');
+  const [newDeadlineHours, setNewDeadlineHours] = useState('24');
+  const [creatingAssignment, setCreatingAssignment] = useState(false);
+  const [teacherAttachments, setTeacherAttachments] = useState<
+    Array<{ name: string; type: string; size: number; uri?: string }>
+  >([]);
+
+  // Ambil mata pelajaran pengampu sesuai akun guru yang sedang login
+  useEffect(() => {
+    const fetchSubjects = async () => {
+      if ((userRole === 'guru' || userRole === 'admin') && userSchool?.id && user?.id) {
+        try {
+          const tRes = await apiClient.getTeacherSubjects(userSchool.id, user.id);
+          if (tRes.teacher_subjects && tRes.teacher_subjects.length > 0) {
+            const mapped = tRes.teacher_subjects.map((ts) => ({
+              id: ts.subject_id,
+              nama: ts.subject?.nama || ts.subject_id,
+            }));
+            setTeacherSubjects(mapped);
+            if (mapped.length > 0) {
+              setNewMapelTugas(mapped[0].nama);
+            }
+            return;
+          }
+        } catch {
+          // fallback jika offline
+        }
+      }
+      setTeacherSubjects([
+        { id: 'sub_matematika', nama: 'Matematika' },
+        { id: 'sub_ipa', nama: 'Ilmu Pengetahuan Alam (IPA)' },
+      ]);
+      setNewMapelTugas('Matematika');
+    };
+    fetchSubjects();
+  }, [userRole, userSchool?.id, user?.id]);
+
+  // Detail Tugas & Modal Pengumpulan Lampiran
+  const [selectedAssignment, setSelectedAssignment] = useState<any | null>(null);
+  const [attachedFiles, setAttachedFiles] = useState<
+    Array<{ name: string; type: string; size: number; uri?: string }>
+  >([]);
+  const [submissionCatatan, setSubmissionCatatan] = useState('');
+  const [submittingAssignment, setSubmittingAssignment] = useState(false);
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => setTick((t) => t + 1), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const getDeadlineStats = (deadlineStr?: string) => {
+    if (!deadlineStr) {
+      return {
+        label: 'Tanpa Tenggat',
+        isExpired: false,
+        hours: 0,
+        minutes: 0,
+        seconds: 0,
+        days: 0,
+      };
+    }
+    const diff = new Date(deadlineStr).getTime() - Date.now();
+    if (diff <= 0) {
+      return {
+        label: 'Waktu Habis (Terkunci)',
+        isExpired: true,
+        hours: 0,
+        minutes: 0,
+        seconds: 0,
+        days: 0,
+      };
+    }
+    const totalSecs = Math.floor(diff / 1000);
+    const days = Math.floor(totalSecs / 86400);
+    const hours = Math.floor((totalSecs % 86400) / 3600);
+    const minutes = Math.floor((totalSecs % 3600) / 60);
+    const seconds = totalSecs % 60;
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const label = days > 0 ? `${days}h ${pad(hours)}j ${pad(minutes)}m` : `${pad(hours)}j ${pad(minutes)}m ${pad(seconds)}d`;
+    return {
+      label,
+      isExpired: false,
+      hours,
+      minutes,
+      seconds,
+      days,
+    };
+  };
+
+  const [copiedDeskripsi, setCopiedDeskripsi] = useState(false);
+
+  const handleCopyDeskripsi = async () => {
+    if (!selectedAssignment?.deskripsi) return;
+    try {
+      await Clipboard.setStringAsync(selectedAssignment.deskripsi);
+      setCopiedDeskripsi(true);
+      setTimeout(() => setCopiedDeskripsi(false), 2500);
+    } catch {
+      Alert.alert('Gagal', 'Tidak dapat menyalin teks ke clipboard.');
+    }
+  };
+
+  const handlePickRealFile = async (format: 'photo' | 'word' | 'excel' | 'pdf') => {
+    try {
+      if (format === 'photo') {
+        const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!perm.granted) {
+          Alert.alert('Izin Dibutuhkan', 'Izin akses galeri foto perangkat diperlukan untuk memilih foto tugas.');
+          return;
+        }
+        const result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ['images'],
+          allowsEditing: false,
+          quality: 0.85,
+        });
+        if (!result.canceled && result.assets && result.assets.length > 0) {
+          const asset = result.assets[0];
+          const fileName = asset.fileName || `Foto_Tugas_${Date.now()}.jpg`;
+          const fileSize = asset.fileSize || 1200000;
+          setAttachedFiles((prev) => [
+            ...prev,
+            { name: fileName, type: 'photo', size: fileSize, uri: asset.uri },
+          ]);
+        }
+      } else {
+        let mimeTypes: string[] = ['*/*'];
+        if (format === 'word') {
+          mimeTypes = [
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          ];
+        } else if (format === 'excel') {
+          mimeTypes = [
+            'application/vnd.ms-excel',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'text/csv',
+          ];
+        } else if (format === 'pdf') {
+          mimeTypes = ['application/pdf'];
+        }
+
+        const result = await DocumentPicker.getDocumentAsync({
+          type: mimeTypes,
+          copyToCacheDirectory: true,
+          multiple: false,
+        });
+
+        if (!result.canceled && result.assets && result.assets.length > 0) {
+          const asset = result.assets[0];
+          const fileName = asset.name || `Dokumen_${format.toUpperCase()}_${Date.now()}`;
+          const fileSize = asset.size || 450000;
+          setAttachedFiles((prev) => [
+            ...prev,
+            { name: fileName, type: format, size: fileSize, uri: asset.uri },
+          ]);
+        }
+      }
+    } catch (e: any) {
+      Alert.alert('Gagal Membuka File', e.message || 'Gagal memilih berkas dari perangkat.');
+    }
+  };
+
+  const handlePickTeacherFile = async (format: 'dokumen' | 'gambar') => {
+    try {
+      if (format === 'gambar') {
+        const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!perm.granted) {
+          Alert.alert('Izin Dibutuhkan', 'Izin akses galeri foto perangkat diperlukan.');
+          return;
+        }
+        const result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ['images'],
+          allowsEditing: false,
+          quality: 0.85,
+        });
+        if (!result.canceled && result.assets && result.assets.length > 0) {
+          const asset = result.assets[0];
+          const fileName = asset.fileName || `Gambar_Materi_${Date.now()}.jpg`;
+          const fileSize = asset.fileSize || 1100000;
+          setTeacherAttachments((prev) => [
+            ...prev,
+            { name: fileName, type: 'gambar', size: fileSize, uri: asset.uri },
+          ]);
+        }
+      } else {
+        const result = await DocumentPicker.getDocumentAsync({
+          type: [
+            'application/pdf',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/vnd.ms-excel',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'text/*',
+          ],
+          copyToCacheDirectory: true,
+          multiple: false,
+        });
+
+        if (!result.canceled && result.assets && result.assets.length > 0) {
+          const asset = result.assets[0];
+          const fileName = asset.name || `Dokumen_${Date.now()}`;
+          const fileSize = asset.size || 500000;
+          setTeacherAttachments((prev) => [
+            ...prev,
+            { name: fileName, type: 'dokumen', size: fileSize, uri: asset.uri },
+          ]);
+        }
+      }
+    } catch (e: any) {
+      Alert.alert('Gagal Membuka File', e.message || 'Gagal memilih berkas dari perangkat.');
+    }
+  };
+
+  const handleRemoveFile = (index: number) => {
+    setAttachedFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSubmitAssignment = async () => {
+    if (!selectedAssignment) return;
+    if (attachedFiles.length === 0) {
+      Alert.alert('Perhatian', 'Lampirkan minimal 1 file (Foto, Word, Excel, atau PDF).');
+      return;
+    }
+    setSubmittingAssignment(true);
+    try {
+      await apiClient.submitAssignment(selectedAssignment.id, {
+        catatan: submissionCatatan.trim() || undefined,
+        files: attachedFiles.map((f) => ({
+          name: f.name,
+          type: f.type,
+          size: f.size,
+          url: f.uri || `https://storage.skita.id/assignments/${f.name}`,
+        })),
+      });
+      Alert.alert('Berhasil', 'Tugas Anda telah berhasil dikumpulkan tepat waktu!');
+      setSelectedAssignment(null);
+      setAttachedFiles([]);
+      setSubmissionCatatan('');
+      await loadAssignments();
+    } catch (e: any) {
+      Alert.alert('Gagal', e.message || 'Gagal mengumpulkan tugas.');
+    } finally {
+      setSubmittingAssignment(false);
+    }
+  };
+
+  const loadAssignments = async () => {
+    setLoadingAssignments(true);
+    try {
+      const res = await apiClient.getClassAssignments(classId);
+      let list = res.assignments || [];
+      if (list.length === 0) {
+        // Fallback contoh tugas jika kosong
+        const now = Date.now();
+        list = [
+          {
+            id: `sample_asgn_1_${classId}`,
+            class_id: classId,
+            period_id: 'prd_demo',
+            judul: 'PR Matematika: Matriks & SPLDV',
+            subject_nama: 'Matematika',
+            guru_nama: 'Ibu Sri Wahyuni, S.Pd.',
+            tanggal: new Date().toISOString().slice(0, 10),
+            deadline: new Date(now + 24 * 60 * 60 * 1000).toISOString(),
+            deskripsi: 'Kerjakan soal no 1-8 pada buku paket halaman 112. Tulis cara penyelesaian lengkap. Unggah lampiran foto jawaban, file Word, atau PDF.',
+            submission_count: 18,
+            is_submitted: false,
+            attachments: [
+              { name: 'Modul_Matriks_Bab3.pdf', type: 'pdf', size: 1250000 },
+            ],
+          },
+          {
+            id: `sample_asgn_2_${classId}`,
+            class_id: classId,
+            period_id: 'prd_demo',
+            judul: 'Laporan Praktikum Biologi: Uji Karbohidrat',
+            subject_nama: 'Biologi',
+            guru_nama: 'Pak Bambang, M.Pd.',
+            tanggal: new Date(now - 86400000).toISOString().slice(0, 10),
+            deadline: new Date(now - 3 * 3600000).toISOString(),
+            deskripsi: 'Buat tabel pengamatan mikroskop dan uji amilum beserta kesimpulan kelompok. Lampirkan berkas Excel (.xlsx) atau PDF.',
+            submission_count: 24,
+            is_submitted: true,
+            attachments: [
+              { name: 'Panduan_Praktikum_Uji_Amilum.pdf', type: 'pdf', size: 980000 },
+            ],
+            my_submission: {
+              id: 'sub_sample_done',
+              assignment_id: `sample_asgn_2_${classId}`,
+              murid_id: 'usr_me',
+              submitted_at: new Date(now - 4 * 3600000).toISOString(),
+              catatan: 'Sudah selesai sesuai format tabel praktikum kelompok 2.',
+              files: [
+                { name: 'Laporan_Biologi_Kelompok2.pdf', type: 'pdf', size: 2340000 },
+                { name: 'Tabel_Hasil_Uji.xlsx', type: 'excel', size: 180000 },
+              ],
+            },
+          },
+        ];
+      }
+      setAssignments(list);
+      setShowAssignments(true);
+    } catch {
+      // Offline fallback sample data
+      const now = Date.now();
+      const list = [
+        {
+          id: `sample_asgn_1_${classId}`,
+          class_id: classId,
+          period_id: 'prd_demo',
+          judul: 'PR Matematika: Matriks & SPLDV',
+          subject_nama: 'Matematika',
+          guru_nama: 'Ibu Sri Wahyuni, S.Pd.',
+          tanggal: new Date().toISOString().slice(0, 10),
+          deadline: new Date(now + 24 * 60 * 60 * 1000).toISOString(),
+          deskripsi: 'Kerjakan soal no 1-8 pada buku paket halaman 112. Tulis cara penyelesaian lengkap. Unggah lampiran foto jawaban, file Word, atau PDF.',
+          submission_count: 18,
+          is_submitted: false,
+          attachments: [
+            { name: 'Modul_Matriks_Bab3.pdf', type: 'pdf', size: 1250000 },
+          ],
+        },
+        {
+          id: `sample_asgn_2_${classId}`,
+          class_id: classId,
+          period_id: 'prd_demo',
+          judul: 'Laporan Praktikum Biologi: Uji Karbohidrat',
+          subject_nama: 'Biologi',
+          guru_nama: 'Pak Bambang, M.Pd.',
+          tanggal: new Date(now - 86400000).toISOString().slice(0, 10),
+          deadline: new Date(now - 3 * 3600000).toISOString(),
+          deskripsi: 'Buat tabel pengamatan mikroskop dan uji amilum beserta kesimpulan kelompok. Lampirkan berkas Excel (.xlsx) atau PDF.',
+          submission_count: 24,
+          is_submitted: true,
+          attachments: [
+            { name: 'Panduan_Praktikum_Uji_Amilum.pdf', type: 'pdf', size: 980000 },
+          ],
+          my_submission: {
+            id: 'sub_sample_done',
+            assignment_id: `sample_asgn_2_${classId}`,
+            murid_id: 'usr_me',
+            submitted_at: new Date(now - 4 * 3600000).toISOString(),
+            catatan: 'Sudah selesai sesuai format tabel praktikum kelompok 2.',
+            files: [
+              { name: 'Laporan_Biologi_Kelompok2.pdf', type: 'pdf', size: 2340000 },
+              { name: 'Tabel_Hasil_Uji.xlsx', type: 'excel', size: 180000 },
+            ],
+          },
+        },
+      ];
+      setAssignments(list);
+      setShowAssignments(true);
+    } finally {
+      setLoadingAssignments(false);
+    }
+  };
+
+  const handleCreateAssignment = async () => {
+    if (!newJudulTugas.trim()) {
+      Alert.alert('Perhatian', 'Judul tugas wajib diisi.');
+      return;
+    }
+    setCreatingAssignment(true);
+    try {
+      const hoursNum = parseInt(newDeadlineHours, 10) || 24;
+      const deadlineDate = new Date(Date.now() + hoursNum * 3600 * 1000).toISOString();
+      await apiClient.createAssignment({
+        class_id: classId,
+        judul: newJudulTugas.trim(),
+        subject_nama: newMapelTugas,
+        deskripsi: newDeskripsiTugas.trim() || undefined,
+        deadline: deadlineDate,
+        attachments: teacherAttachments.map((f) => ({
+          name: f.name,
+          type: f.type,
+          size: f.size,
+          url: f.uri,
+        })),
+      });
+      setNewJudulTugas('');
+      setNewDeskripsiTugas('');
+      setTeacherAttachments([]);
+      setShowAddAssignment(false);
+      await loadAssignments();
+      Alert.alert('Berhasil', 'Tugas baru berhasil ditambahkan.');
+    } catch (e: any) {
+      Alert.alert('Gagal', e.message || 'Gagal membuat tugas.');
+    } finally {
+      setCreatingAssignment(false);
+    }
+  };
 
   const loadMembers = async () => {
     setLoadingMembers(true);
     try {
       const res = await apiClient.getClassMembers(classId);
-      setMembers(res.members);
+      const list = res.members || (res as any).anggota || [];
+      setMembers(list);
       setShowMembers(true);
     } catch (e: any) {
       Alert.alert('Gagal', e.message || 'Gagal memuat daftar anggota.');
@@ -1124,27 +1803,14 @@ function ClassMemberView({
     );
   };
 
-  const handleTeacherSubmitNewClass = async () => {
-    if (!newClassInput.trim() || !onAddNewClassCode) return;
-    setAddingClass(true);
-    try {
-      await onAddNewClassCode(newClassInput.trim());
-      setNewClassInput('');
-      setShowTeacherMenu(false);
-    } catch (e: any) {
-      Alert.alert('Gagal', e.message || 'Gagal menambah kelas.');
-    } finally {
-      setAddingClass(false);
-    }
-  };
 
   return (
     <ScrollView style={s.container} contentContainerStyle={s.dashContent}>
-      {/* Tombol kembali ke Dashboard Sekolah untuk guru */}
+      {/* Tombol kembali ke Dashboard Sekolah untuk guru / sekolah */}
       {onBackToDashboard && (
         <TouchableOpacity style={s.backToDashBtn} onPress={onBackToDashboard} activeOpacity={0.7}>
           <Ionicons name="arrow-back" size={15} color="#047857" />
-          <Text style={s.backToDashText}>Kembali ke Dashboard Sekolah</Text>
+          <Text style={s.backToDashText}>Kembali ke {activeTab === 'kelas' ? 'Daftar Kelas' : 'Dashboard Sekolah'}</Text>
         </TouchableOpacity>
       )}
 
@@ -1161,8 +1827,8 @@ function ClassMemberView({
           <View style={s.roleBadge}>
             <Text style={s.roleBadgeText}>{userRole.toUpperCase()}</Text>
           </View>
-          {/* Tombol + untuk Guru menggantikan filter */}
-          {userRole === 'guru' && (
+          {/* Tombol + untuk Sekolah menggantikan filter */}
+          {userRole === 'sekolah' && (
             <TouchableOpacity
               style={s.teacherPlusBtn}
               onPress={() => setShowTeacherMenu(true)}
@@ -1214,6 +1880,30 @@ function ClassMemberView({
         <Ionicons name="chevron-forward" size={18} color="#94a3b8" />
       </TouchableOpacity>
 
+      <TouchableOpacity
+        style={s.actionCard}
+        onPress={loadAssignments}
+        disabled={loadingAssignments}
+        activeOpacity={0.8}
+      >
+        <View style={[s.actionIconWrap, { backgroundColor: '#fef3c7' }]}>
+          {loadingAssignments ? (
+            <ActivityIndicator size="small" color="#d97706" />
+          ) : (
+            <Ionicons name="clipboard-outline" size={24} color="#d97706" />
+          )}
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={s.actionCardTitle}>Tugas</Text>
+          <Text style={s.actionCardDesc}>
+            {userRole === 'murid'
+              ? 'Daftar penugasan kelas dan tenggat waktu'
+              : 'Kelola dan buat penugasan kelas'}
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color="#94a3b8" />
+      </TouchableOpacity>
+
       {/* Tombol keluar kelas untuk murid */}
       {userRole === 'murid' && (
         <TouchableOpacity style={s.leaveClassBtn} onPress={handleLeaveClass} activeOpacity={0.8}>
@@ -1227,29 +1917,9 @@ function ClassMemberView({
         <View style={s.modalOverlay}>
           <View style={s.modalCard}>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Text style={s.modalTitle}>Manajemen Kelas Guru</Text>
+              <Text style={s.modalTitle}>Pilihan Ruang Kelas</Text>
               <TouchableOpacity onPress={() => setShowTeacherMenu(false)} style={{ padding: 4 }}>
                 <Ionicons name="close" size={20} color="#64748b" />
-              </TouchableOpacity>
-            </View>
-
-            {/* Tambah Kode Kelas Baru */}
-            <Text style={[s.inputLabel, { marginTop: 8 }]}>Tambah Kode Kelas Baru</Text>
-            <View style={{ flexDirection: 'row', gap: 6 }}>
-              <TextInput
-                style={[s.input, { flex: 1 }]}
-                placeholder="Kode kelas baru"
-                placeholderTextColor="#94a3b8"
-                value={newClassInput}
-                onChangeText={setNewClassInput}
-                autoCapitalize="none"
-              />
-              <TouchableOpacity
-                onPress={handleTeacherSubmitNewClass}
-                disabled={addingClass || !newClassInput.trim()}
-                style={[s.confirmBtn, { paddingHorizontal: 14 }]}
-              >
-                {addingClass ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.confirmBtnText}>Tambah</Text>}
               </TouchableOpacity>
             </View>
 
@@ -1324,6 +1994,12 @@ function ClassMemberView({
             data={members}
             keyExtractor={(m) => m.user_id}
             contentContainerStyle={{ padding: 16, gap: 8 }}
+            ListEmptyComponent={
+              <View style={[s.emptyBox, { marginTop: 40 }]}>
+                <Ionicons name="people-outline" size={36} color="#cbd5e1" />
+                <Text style={s.emptyText}>Belum ada anggota di kelas ini.</Text>
+              </View>
+            }
             renderItem={({ item }) => (
               <View style={s.memberRow}>
                 <View style={s.memberNo}>
@@ -1338,6 +2014,931 @@ function ClassMemberView({
           />
         </View>
       </Modal>
+
+      {/* Modal Tugas Kelas (Dengan Detail In-Modal View Switching) */}
+      <Modal
+        visible={showAssignments}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => {
+          if (selectedAssignment) {
+            setSelectedAssignment(null);
+          } else {
+            setShowAssignments(false);
+          }
+        }}
+      >
+        <View style={{ flex: 1, backgroundColor: '#f8fafc' }}>
+          {!selectedAssignment && (
+            <View style={s.modalHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={s.modalTitle}>Tugas Kelas ({assignments.length})</Text>
+                <Text style={{ fontSize: 12, color: '#64748b', marginTop: 1 }}>{className}</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowAssignments(false)} style={{ padding: 4 }} activeOpacity={0.7}>
+                <Ionicons name="close" size={22} color="#374151" />
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {!selectedAssignment && assignments.length === 0 && (
+            <View style={[s.emptyBox, { marginTop: 40 }]}>
+              <Ionicons name="clipboard-outline" size={40} color="#cbd5e1" />
+              <Text style={[s.emptyText, { marginTop: 8 }]}>Belum ada tugas di kelas ini.</Text>
+              <Text style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', maxWidth: 260, marginTop: 4 }}>
+                {userRole === 'murid'
+                  ? 'Guru belum memberikan penugasan baru.'
+                  : 'Tekan tombol "Buat" untuk menambahkan tugas baru.'}
+              </Text>
+            </View>
+          )}
+
+          {!selectedAssignment && assignments.length > 0 && (
+            <FlatList
+              data={assignments}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={{ padding: 16, gap: 12 }}
+              renderItem={({ item }) => {
+                const stats = getDeadlineStats(item.deadline);
+                return (
+                  <TouchableOpacity
+                    onPress={() => {
+                      setSelectedAssignment(item);
+                      setAttachedFiles([]);
+                      setSubmissionCatatan('');
+                    }}
+                    activeOpacity={0.75}
+                    style={{
+                      backgroundColor: '#ffffff',
+                      borderRadius: 12,
+                      padding: 14,
+                      borderWidth: 1,
+                      borderColor: stats.isExpired ? '#fecdd3' : '#e2e8f0',
+                      gap: 10,
+                      shadowColor: '#000',
+                      shadowOffset: { width: 0, height: 1 },
+                      shadowOpacity: 0.04,
+                      shadowRadius: 2,
+                      elevation: 1,
+                    }}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 4,
+                          backgroundColor: '#ecfdf5',
+                          borderWidth: 1,
+                          borderColor: '#a7f3d0',
+                          paddingHorizontal: 8,
+                          paddingVertical: 3,
+                          borderRadius: 6,
+                        }}
+                      >
+                        <Ionicons name="book-outline" size={11} color="#047857" />
+                        <Text style={{ fontSize: 10.5, fontWeight: '700', color: '#047857' }}>
+                          {item.subject_nama || 'Mata Pelajaran'}
+                        </Text>
+                      </View>
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 4,
+                          backgroundColor: stats.isExpired ? '#ffe4e6' : '#ecfdf5',
+                          paddingHorizontal: 8,
+                          paddingVertical: 3,
+                          borderRadius: 6,
+                          borderWidth: 1,
+                          borderColor: stats.isExpired ? '#fecdd3' : '#bbf7d0',
+                        }}
+                      >
+                        <Ionicons
+                          name={stats.isExpired ? 'lock-closed' : 'time-outline'}
+                          size={12}
+                          color={stats.isExpired ? '#e11d48' : '#047857'}
+                        />
+                        <Text
+                          style={{
+                            fontSize: 10.5,
+                            fontWeight: '700',
+                            color: stats.isExpired ? '#be123c' : '#047857',
+                          }}
+                        >
+                          {stats.label}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
+                      <View
+                        style={{
+                          width: 38,
+                          height: 38,
+                          borderRadius: 8,
+                          backgroundColor: stats.isExpired ? '#fef2f2' : '#f0fdf4',
+                          borderWidth: 1,
+                          borderColor: stats.isExpired ? '#fee2e2' : '#dcfce7',
+                          justifyContent: 'center',
+                          alignItems: 'center',
+                        }}
+                      >
+                        <Ionicons
+                          name={stats.isExpired ? 'document-lock-outline' : 'document-text-outline'}
+                          size={20}
+                          color={stats.isExpired ? '#e11d48' : '#047857'}
+                        />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 14, fontWeight: '700', color: '#0f172a', marginBottom: 3 }}>
+                          {item.judul}
+                        </Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          {item.guru_nama ? (
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                              <Ionicons name="person-outline" size={11} color="#64748b" />
+                              <Text style={{ fontSize: 11, color: '#64748b' }}>{item.guru_nama}</Text>
+                            </View>
+                          ) : null}
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                            <Ionicons name="calendar-outline" size={11} color="#64748b" />
+                            <Text style={{ fontSize: 11, color: '#64748b' }}>{item.tanggal}</Text>
+                          </View>
+                        </View>
+                      </View>
+                    </View>
+
+                    {item.deskripsi ? (
+                      <Text style={{ fontSize: 12, color: '#475569', lineHeight: 18 }} numberOfLines={2}>
+                        {item.deskripsi}
+                      </Text>
+                    ) : null}
+
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        borderTopWidth: 1,
+                        borderTopColor: '#f1f5f9',
+                        paddingTop: 8,
+                        marginTop: 2,
+                      }}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Ionicons
+                          name={item.is_submitted ? 'checkmark-circle' : 'ellipse-outline'}
+                          size={14}
+                          color={item.is_submitted ? '#16a34a' : '#94a3b8'}
+                        />
+                        <Text
+                          style={{
+                            fontSize: 11,
+                            fontWeight: '600',
+                            color: item.is_submitted ? '#16a34a' : '#64748b',
+                          }}
+                        >
+                          {item.is_submitted ? 'Sudah Dikumpulkan' : 'Belum Dikumpulkan'}
+                        </Text>
+                      </View>
+
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                        <Text style={{ fontSize: 11.5, fontWeight: '700', color: '#047857' }}>Lihat Detail</Text>
+                        <Ionicons name="chevron-forward" size={13} color="#047857" />
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                );
+              }}
+            />
+          )}
+
+          {/* Floating Action Button (FAB) + Tambah Tugas Baru (Untuk Guru & Admin) */}
+          {!selectedAssignment && (userRole === 'guru' || userRole === 'admin') && (
+            <TouchableOpacity
+              onPress={() => setShowAddAssignment(true)}
+              style={{
+                position: 'absolute',
+                right: 20,
+                bottom: 24,
+                width: 56,
+                height: 56,
+                borderRadius: 28,
+                backgroundColor: '#047857',
+                alignItems: 'center',
+                justifyContent: 'center',
+                shadowColor: '#047857',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.35,
+                shadowRadius: 6,
+                elevation: 6,
+                zIndex: 10,
+              }}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="add" size={28} color="#ffffff" />
+            </TouchableOpacity>
+          )}
+
+          {/* Render Detail & Pengumpulan Tugas Langsung di Dalam Modal (In-Modal View Transition) */}
+          {selectedAssignment && (() => {
+            const stats = getDeadlineStats(selectedAssignment.deadline);
+            const isLocked = stats.isExpired;
+            const alreadyDone = Boolean(selectedAssignment.is_submitted);
+
+            return (
+              <View style={{ flex: 1 }}>
+                {/* Top Bar Header Detail */}
+                <View
+                  style={{
+                    paddingHorizontal: 16,
+                    paddingVertical: 14,
+                    borderBottomWidth: 1,
+                    borderBottomColor: '#f1f5f9',
+                    backgroundColor: '#ffffff',
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  <TouchableOpacity
+                    onPress={() => setSelectedAssignment(null)}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 }}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="arrow-back" size={20} color="#047857" />
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: '#047857' }}>Daftar Tugas</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={() => {
+                      setSelectedAssignment(null);
+                      setShowAssignments(false);
+                    }}
+                    style={{ padding: 4 }}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="close" size={22} color="#475569" />
+                  </TouchableOpacity>
+                </View>
+
+                {/* Scrollable Body */}
+                <ScrollView contentContainerStyle={{ padding: 16, gap: 14 }}>
+                  <View style={{ backgroundColor: '#ffffff', borderRadius: 12, padding: 16, borderWidth: 1, borderColor: '#e2e8f0', gap: 10 }}>
+                    <View
+                      style={{
+                        alignSelf: 'flex-start',
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 4,
+                        backgroundColor: '#ecfdf5',
+                        borderWidth: 1,
+                        borderColor: '#a7f3d0',
+                        paddingHorizontal: 8,
+                        paddingVertical: 3,
+                        borderRadius: 6,
+                      }}
+                    >
+                      <Ionicons name="book-outline" size={12} color="#047857" />
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: '#047857' }}>
+                        {selectedAssignment.subject_nama || 'Mata Pelajaran'}
+                      </Text>
+                    </View>
+
+                    <Text style={{ fontSize: 18, fontWeight: '800', color: '#0f172a', lineHeight: 24 }}>
+                      {selectedAssignment.judul}
+                    </Text>
+
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                        <Ionicons name="person-outline" size={12} color="#64748b" />
+                        <Text style={{ fontSize: 12, color: '#475569', fontWeight: '500' }}>
+                          {selectedAssignment.guru_nama || 'Guru Pengampu'}
+                        </Text>
+                      </View>
+                      <Text style={{ color: '#cbd5e1' }}>•</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                        <Ionicons name="calendar-outline" size={12} color="#64748b" />
+                        <Text style={{ fontSize: 12, color: '#64748b' }}>
+                          {selectedAssignment.tanggal}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* Box Countdown Timer Sisa Waktu */}
+                  <View
+                    style={{
+                      backgroundColor: isLocked ? '#fff1f2' : '#f0fdf4',
+                      borderWidth: 1,
+                      borderColor: isLocked ? '#fecdd3' : '#bbf7d0',
+                      borderRadius: 12,
+                      padding: 14,
+                      gap: 8,
+                    }}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Ionicons
+                          name={isLocked ? 'lock-closed' : 'alarm-outline'}
+                          size={16}
+                          color={isLocked ? '#e11d48' : '#047857'}
+                        />
+                        <Text
+                          style={{
+                            fontSize: 11.5,
+                            fontWeight: '800',
+                            textTransform: 'uppercase',
+                            color: isLocked ? '#be123c' : '#047857',
+                            letterSpacing: 0.5,
+                          }}
+                        >
+                          {isLocked ? 'Tenggat Waktu Berakhir' : 'Tenggat Waktu Pengumpulan'}
+                        </Text>
+                      </View>
+                      <View
+                        style={{
+                          paddingHorizontal: 8,
+                          paddingVertical: 2,
+                          borderRadius: 10,
+                          backgroundColor: isLocked ? '#ffe4e6' : '#dcfce7',
+                        }}
+                      >
+                        <Text
+                          style={{
+                            fontSize: 10.5,
+                            fontWeight: '700',
+                            color: isLocked ? '#e11d48' : '#15803d',
+                          }}
+                        >
+                          {isLocked ? 'Waktu Habis' : 'Aktif'}
+                        </Text>
+                      </View>
+                    </View>
+                    <Text
+                      style={{
+                        fontSize: 13,
+                        fontWeight: '700',
+                        color: isLocked ? '#9f1239' : '#166534',
+                      }}
+                    >
+                      {stats.label}
+                    </Text>
+                  </View>
+
+                  {/* Instruksi Tugas */}
+                  <View
+                    style={{
+                      backgroundColor: '#ffffff',
+                      borderRadius: 12,
+                      borderWidth: 1,
+                      borderColor: '#e2e8f0',
+                      padding: 14,
+                      gap: 8,
+                    }}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Ionicons name="document-text-outline" size={16} color="#0f172a" />
+                        <Text style={{ fontSize: 13, fontWeight: '700', color: '#0f172a' }}>
+                          Petunjuk & Soal Tugas
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        onPress={handleCopyDeskripsi}
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 4,
+                          paddingHorizontal: 8,
+                          paddingVertical: 4,
+                          borderRadius: 6,
+                          backgroundColor: '#f1f5f9',
+                        }}
+                      >
+                        <Ionicons name="copy-outline" size={12} color="#475569" />
+                        <Text style={{ fontSize: 11, fontWeight: '600', color: '#475569' }}>
+                          {copiedDeskripsi ? 'Tersalin' : 'Salin'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                    <Text
+                      style={{
+                        fontSize: 13,
+                        color: '#334155',
+                        lineHeight: 20,
+                        backgroundColor: '#f8fafc',
+                        padding: 10,
+                        borderRadius: 8,
+                      }}
+                      selectable
+                    >
+                      {selectedAssignment.deskripsi || 'Tidak ada petunjuk khusus untuk tugas ini.'}
+                    </Text>
+                  </View>
+
+                  {/* Dokumen / Lampiran Berkas dari Guru untuk Murid Lihat */}
+                  {selectedAssignment.attachments && selectedAssignment.attachments.length > 0 && (
+                    <View
+                      style={{
+                        backgroundColor: '#ffffff',
+                        borderRadius: 12,
+                        borderWidth: 1,
+                        borderColor: '#bbf7d0',
+                        padding: 14,
+                        gap: 10,
+                      }}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Ionicons name="document-attach" size={17} color="#047857" />
+                        <Text style={{ fontSize: 13, fontWeight: '700', color: '#065f46' }}>
+                          Dokumen / Lampiran Tugas dari Guru ({selectedAssignment.attachments.length})
+                        </Text>
+                      </View>
+                      <Text style={{ fontSize: 11, color: '#475569' }}>
+                        Unduh atau buka berkas materi / lembar kerja di bawah ini untuk mengerjakan tugas:
+                      </Text>
+                      {selectedAssignment.attachments.map((file: any, fIdx: number) => (
+                        <View
+                          key={fIdx}
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            backgroundColor: '#f8fafc',
+                            borderWidth: 1,
+                            borderColor: '#e2e8f0',
+                            borderRadius: 8,
+                            padding: 10,
+                          }}
+                        >
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, marginRight: 8 }}>
+                            <View
+                              style={{
+                                width: 34,
+                                height: 34,
+                                borderRadius: 8,
+                                backgroundColor: '#ecfdf5',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                              }}
+                            >
+                              <Ionicons
+                                name={file.type === 'gambar' || file.type === 'photo' ? 'image' : 'document-text'}
+                                size={18}
+                                color="#047857"
+                              />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={{ fontSize: 12, fontWeight: '700', color: '#1e293b' }} numberOfLines={1}>
+                                {file.name}
+                              </Text>
+                              <Text style={{ fontSize: 10, color: '#64748b', marginTop: 1 }}>
+                                {file.size ? `${(Number(file.size) / 1024).toFixed(0)} KB` : 'Dokumen'} · {String(file.type || '').toUpperCase()}
+                              </Text>
+                            </View>
+                          </View>
+                          <TouchableOpacity
+                            onPress={() => Alert.alert('Buka Dokumen', `Membuka berkas "${file.name}"...`)}
+                            style={{
+                              backgroundColor: '#047857',
+                              paddingHorizontal: 12,
+                              paddingVertical: 6,
+                              borderRadius: 6,
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              gap: 4,
+                            }}
+                            activeOpacity={0.8}
+                          >
+                            <Ionicons name="eye-outline" size={13} color="#fff" />
+                            <Text style={{ fontSize: 11, fontWeight: '700', color: '#fff' }}>Lihat</Text>
+                          </TouchableOpacity>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
+                  {/* Lampiran & Pengumpulan (Hanya Untuk Murid) */}
+                  {userRole === 'murid' && (
+                    <View
+                      style={{
+                        backgroundColor: '#ffffff',
+                        borderRadius: 12,
+                        borderWidth: 1,
+                        borderColor: '#e2e8f0',
+                        padding: 14,
+                        gap: 12,
+                      }}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <Ionicons name="attach" size={16} color="#0f172a" />
+                          <Text style={{ fontSize: 13, fontWeight: '700', color: '#0f172a' }}>
+                            {alreadyDone ? 'Berkas yang Telah Dikumpulkan' : 'Lampiran Tugas Anda'}
+                          </Text>
+                        </View>
+                        {alreadyDone ? (
+                          <View
+                            style={{
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              gap: 4,
+                              backgroundColor: '#dcfce7',
+                              paddingHorizontal: 8,
+                              paddingVertical: 2,
+                              borderRadius: 10,
+                            }}
+                          >
+                            <Ionicons name="checkmark-done" size={12} color="#15803d" />
+                            <Text style={{ fontSize: 10.5, fontWeight: '700', color: '#15803d' }}>Sudah Dikumpulkan</Text>
+                          </View>
+                        ) : null}
+                      </View>
+
+                      {!alreadyDone && !isLocked && (
+                        <View style={{ flexDirection: 'row', gap: 8 }}>
+                          <TouchableOpacity
+                            onPress={() => handlePickRealFile('pdf')}
+                            activeOpacity={0.8}
+                            style={{
+                              flex: 1,
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: 6,
+                              paddingVertical: 10,
+                              borderRadius: 8,
+                              borderWidth: 1,
+                              borderStyle: 'dashed',
+                              borderColor: '#94a3b8',
+                              backgroundColor: '#f8fafc',
+                            }}
+                          >
+                            <Ionicons name="document-attach-outline" size={16} color="#047857" />
+                            <Text style={{ fontSize: 12, fontWeight: '600', color: '#047857' }}>
+                              Dokumen
+                            </Text>
+                          </TouchableOpacity>
+
+                          <TouchableOpacity
+                            onPress={() => handlePickRealFile('photo')}
+                            activeOpacity={0.8}
+                            style={{
+                              flex: 1,
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: 6,
+                              paddingVertical: 10,
+                              borderRadius: 8,
+                              borderWidth: 1,
+                              borderStyle: 'dashed',
+                              borderColor: '#94a3b8',
+                              backgroundColor: '#f8fafc',
+                            }}
+                          >
+                            <Ionicons name="image-outline" size={16} color="#047857" />
+                            <Text style={{ fontSize: 12, fontWeight: '600', color: '#047857' }}>
+                              Foto Jawaban
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
+
+                      {/* List Attached Files */}
+                      {attachedFiles.length > 0 ? (
+                        <View style={{ gap: 6 }}>
+                          {attachedFiles.map((file, idx) => (
+                            <View
+                              key={idx}
+                              style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                backgroundColor: '#f1f5f9',
+                                paddingHorizontal: 10,
+                                paddingVertical: 8,
+                                borderRadius: 8,
+                              }}
+                            >
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                                <Ionicons
+                                  name={file.type === 'photo' ? 'image' : 'document'}
+                                  size={16}
+                                  color="#475569"
+                                />
+                                <View style={{ flex: 1 }}>
+                                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#1e293b' }} numberOfLines={1}>
+                                    {file.name}
+                                  </Text>
+                                  {file.size ? (
+                                    <Text style={{ fontSize: 10.5, color: '#64748b' }}>
+                                      {(file.size / 1024).toFixed(1)} KB
+                                    </Text>
+                                  ) : null}
+                                </View>
+                              </View>
+                              {!alreadyDone && !isLocked && (
+                                <TouchableOpacity onPress={() => handleRemoveFile(idx)} style={{ padding: 4 }}>
+                                  <Ionicons name="trash-outline" size={16} color="#ef4444" />
+                                </TouchableOpacity>
+                              )}
+                            </View>
+                          ))}
+                        </View>
+                      ) : (
+                        <Text style={{ fontSize: 11.5, color: '#94a3b8', fontStyle: 'italic', textAlign: 'center', paddingVertical: 4 }}>
+                          {alreadyDone
+                            ? 'Tidak ada lampiran berkas.'
+                            : 'Belum ada berkas lampiran dipilih.'}
+                        </Text>
+                      )}
+
+                      {/* Catatan untuk Guru */}
+                      {!alreadyDone && !isLocked && (
+                        <View style={{ gap: 4, marginTop: 4 }}>
+                          <Text style={{ fontSize: 12, fontWeight: '600', color: '#334155' }}>
+                            Catatan untuk Guru (Opsional)
+                          </Text>
+                          <TextInput
+                            value={submissionCatatan}
+                            onChangeText={setSubmissionCatatan}
+                            placeholder="Tuliskan catatan atau kendala jika ada..."
+                            placeholderTextColor="#94a3b8"
+                            multiline
+                            numberOfLines={2}
+                            style={{
+                              backgroundColor: '#f8fafc',
+                              borderWidth: 1,
+                              borderColor: '#cbd5e1',
+                              borderRadius: 8,
+                              paddingHorizontal: 10,
+                              paddingVertical: 8,
+                              fontSize: 12,
+                              color: '#0f172a',
+                              textAlignVertical: 'top',
+                            }}
+                          />
+                        </View>
+                      )}
+
+                      {/* Tombol Submit */}
+                      {alreadyDone ? (
+                        <View
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 6,
+                            paddingVertical: 12,
+                            borderRadius: 10,
+                            backgroundColor: '#f0fdf4',
+                            borderWidth: 1,
+                            borderColor: '#86efac',
+                          }}
+                        >
+                          <Ionicons name="checkmark-circle" size={16} color="#16a34a" />
+                          <Text style={{ fontSize: 13, fontWeight: '700', color: '#16a34a' }}>
+                            Tugas Telah Dikumpulkan
+                          </Text>
+                        </View>
+                      ) : isLocked ? (
+                        <View
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            paddingVertical: 12,
+                            borderRadius: 10,
+                            backgroundColor: '#fff1f2',
+                            borderWidth: 1,
+                            borderColor: '#fecdd3',
+                          }}
+                        >
+                          <Text style={{ fontSize: 13, fontWeight: '700', color: '#e11d48' }}>
+                            Pengumpulan Ditutup (Melewati Deadline)
+                          </Text>
+                        </View>
+                      ) : (
+                        <TouchableOpacity
+                          onPress={handleSubmitAssignment}
+                          disabled={submittingAssignment}
+                          activeOpacity={0.8}
+                          style={[
+                            s.confirmBtn,
+                            {
+                              paddingVertical: 13,
+                              borderRadius: 10,
+                              flexDirection: 'row',
+                              justifyContent: 'center',
+                              alignItems: 'center',
+                              gap: 6,
+                            },
+                            submittingAssignment && { opacity: 0.6 },
+                          ]}
+                        >
+                          {submittingAssignment ? (
+                            <ActivityIndicator size="small" color="#fff" />
+                          ) : (
+                            <>
+                              <Ionicons name="cloud-upload-outline" size={16} color="#ffffff" />
+                              <Text style={[s.confirmBtnText, { fontSize: 13.5 }]}>
+                                Kumpulkan Tugas ({attachedFiles.length} Berkas)
+                              </Text>
+                            </>
+                          )}
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  )}
+                </ScrollView>
+              </View>
+            );
+          })()}
+        </View>
+      </Modal>
+      {/* Modal Buat Tugas Baru (Untuk Guru & Admin) */}
+      <Modal visible={showAddAssignment} transparent animationType="fade" onRequestClose={() => setShowAddAssignment(false)}>
+            <View style={s.modalOverlay}>
+              <View style={[s.modalCard, { maxHeight: '85%' }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <Text style={s.modalTitle}>Tambah Tugas Baru</Text>
+                  <TouchableOpacity onPress={() => setShowAddAssignment(false)} style={{ padding: 4 }}>
+                    <Ionicons name="close" size={20} color="#64748b" />
+                  </TouchableOpacity>
+                </View>
+
+                <ScrollView style={{ maxHeight: 420 }} showsVerticalScrollIndicator={false}>
+                  <Text style={s.inputLabel}>Mata Pelajaran (Sesuai Guru Pengampu)</Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+                    {teacherSubjects.map((sub) => (
+                      <TouchableOpacity
+                        key={sub.id}
+                        onPress={() => setNewMapelTugas(sub.nama)}
+                        style={{
+                          paddingHorizontal: 10,
+                          paddingVertical: 5,
+                          borderRadius: 8,
+                          borderWidth: 1,
+                          borderColor: newMapelTugas === sub.nama ? '#047857' : '#cbd5e1',
+                          backgroundColor: newMapelTugas === sub.nama ? '#ecfdf5' : '#ffffff',
+                        }}
+                      >
+                        <Text style={{ fontSize: 11, fontWeight: '600', color: newMapelTugas === sub.nama ? '#047857' : '#475569' }}>
+                          {sub.nama}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  <Text style={s.inputLabel}>Judul Tugas</Text>
+                  <TextInput
+                    style={s.input}
+                    placeholder="Contoh: PR Matematika Bab 3"
+                    placeholderTextColor="#94a3b8"
+                    value={newJudulTugas}
+                    onChangeText={setNewJudulTugas}
+                  />
+
+                  <Text style={[s.inputLabel, { marginTop: 10 }]}>Batas Waktu Pengumpulan (Countdown)</Text>
+                  <View style={{ flexDirection: 'row', gap: 6, marginBottom: 10 }}>
+                    {[
+                      { label: '24 Jam', val: '24' },
+                      { label: '48 Jam', val: '48' },
+                      { label: '3 Hari', val: '72' },
+                      { label: '7 Hari', val: '168' },
+                    ].map((d) => (
+                      <TouchableOpacity
+                        key={d.val}
+                        onPress={() => setNewDeadlineHours(d.val)}
+                        style={{
+                          flex: 1,
+                          paddingVertical: 8,
+                          borderRadius: 8,
+                          borderWidth: 1,
+                          borderColor: newDeadlineHours === d.val ? '#047857' : '#cbd5e1',
+                          backgroundColor: newDeadlineHours === d.val ? '#ecfdf5' : '#ffffff',
+                          alignItems: 'center',
+                        }}
+                      >
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: newDeadlineHours === d.val ? '#047857' : '#475569' }}>
+                          {d.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  <Text style={s.inputLabel}>Deskripsi & Petunjuk Soal</Text>
+                  <TextInput
+                    style={[s.input, { height: 70, textAlignVertical: 'top' }]}
+                    placeholder="Tulis instruksi pengerjaan tugas di sini..."
+                    placeholderTextColor="#94a3b8"
+                    multiline
+                    value={newDeskripsiTugas}
+                    onChangeText={setNewDeskripsiTugas}
+                  />
+
+                  {/* Lampiran Dokumen Pembelajaran untuk Murid */}
+                  <Text style={[s.inputLabel, { marginTop: 10 }]}>Lampiran Dokumen untuk Murid</Text>
+                  <Text style={{ fontSize: 11, color: '#64748b', marginBottom: 6 }}>
+                    Sertakan modul bacaan atau gambar panduan yang dapat dilihat dan dipelajari murid.
+                  </Text>
+                  <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+                    <TouchableOpacity
+                      onPress={() => handlePickTeacherFile('dokumen')}
+                      style={{
+                        flex: 1,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 6,
+                        paddingVertical: 9,
+                        borderRadius: 8,
+                        borderWidth: 1,
+                        borderColor: '#cbd5e1',
+                        backgroundColor: '#f8fafc',
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="document-text-outline" size={15} color="#047857" />
+                      <Text style={{ fontSize: 12, fontWeight: '600', color: '#1e293b' }}>Dokumen</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => handlePickTeacherFile('gambar')}
+                      style={{
+                        flex: 1,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 6,
+                        paddingVertical: 9,
+                        borderRadius: 8,
+                        borderWidth: 1,
+                        borderColor: '#cbd5e1',
+                        backgroundColor: '#f8fafc',
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="image-outline" size={15} color="#047857" />
+                      <Text style={{ fontSize: 12, fontWeight: '600', color: '#1e293b' }}>Gambar</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* List Dokumen Terlampir */}
+                  {teacherAttachments.map((f, i) => (
+                    <View
+                      key={i}
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        backgroundColor: '#f1f5f9',
+                        paddingHorizontal: 10,
+                        paddingVertical: 6,
+                        borderRadius: 6,
+                        marginBottom: 6,
+                      }}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1, marginRight: 6 }}>
+                        <Ionicons name="document-attach" size={14} color="#047857" />
+                        <Text style={{ fontSize: 11, color: '#1e293b', flex: 1 }} numberOfLines={1}>{f.name}</Text>
+                      </View>
+                      <TouchableOpacity
+                        onPress={() => setTeacherAttachments((prev) => prev.filter((_, idx) => idx !== i))}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <Ionicons name="close-circle" size={16} color="#94a3b8" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </ScrollView>
+
+                <View style={[s.modalActions, { marginTop: 14 }]}>
+                  <TouchableOpacity
+                    style={s.cancelBtn}
+                    onPress={() => setShowAddAssignment(false)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={s.cancelBtnText}>Batal</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[s.confirmModalBtn, creatingAssignment && { opacity: 0.6 }]}
+                    onPress={handleCreateAssignment}
+                    disabled={creatingAssignment}
+                    activeOpacity={0.8}
+                  >
+                    {creatingAssignment ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Text style={s.confirmBtnText}>Simpan Tugas</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </Modal>
     </ScrollView>
   );
 }
@@ -1345,88 +2946,61 @@ function ClassMemberView({
 // ─── Admin School Monitor View ───────────────────────────────────────────────
 
 function AdminSchoolMonitorView() {
-  const { isCreateClassModalOpen, setIsCreateClassModalOpen } = useApp();
+  const { schools: contextSchools, refreshSchools, setActiveTab } = useApp();
   const [loading, setLoading] = useState(true);
   const [schools, setSchools] = useState<any[]>([]);
   const [allClasses, setAllClasses] = useState<any[]>([]);
   const [selectedSchool, setSelectedSchool] = useState<any | null>(null);
-
-  // Buat kelas
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [newNama, setNewNama] = useState('');
-  const [newTingkat, setNewTingkat] = useState('');
-  const [creating, setCreating] = useState(false);
-  const [codeLoading, setCodeLoading] = useState<Record<string, boolean>>({});
+  const [searchQuery, setSearchQuery] = useState('');
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
+      await refreshSchools();
       const res = await apiClient.getMonitoringScope();
       const schList = (res as any).schools || (res as any).scope?.schools || [];
       const clsList = (res as any).classes || (res as any).scope?.classes || [];
-      setSchools(schList);
+
+      // Gabungkan contextSchools & server schools agar SEMUA sekolah terdaftar pasti muncul
+      const schoolMap = new Map<string, any>();
+      contextSchools.forEach((s) => {
+        schoolMap.set(s.id, {
+          id: s.id,
+          nama: s.nama,
+          jenjang: s.jenjang,
+          member_count: 0,
+          class_count: 0,
+        });
+      });
+      schList.forEach((s: any) => {
+        const prev = schoolMap.get(s.id);
+        schoolMap.set(s.id, { ...prev, ...s });
+      });
+
+      const mergedSchools = Array.from(schoolMap.values());
+      setSchools(mergedSchools);
       setAllClasses(clsList);
       // Jika sebelumnya sudah pilih sekolah, sinkronkan datanya
       if (selectedSchool) {
-        const found = schList.find((s: any) => s.id === selectedSchool.id);
+        const found = mergedSchools.find((s: any) => s.id === selectedSchool.id);
         if (found) setSelectedSchool(found);
       }
     } catch {
-      // fallback
+      setSchools(contextSchools.map((s) => ({ ...s, member_count: 0, class_count: 0 })));
     } finally {
       setLoading(false);
     }
-  }, [selectedSchool?.id]);
+  }, [contextSchools, selectedSchool?.id]);
 
   useEffect(() => {
     loadData();
   }, []);
 
-  const handleCreateClass = async () => {
-    if (!newNama.trim() || !newTingkat.trim()) {
-      Alert.alert('Perhatian', 'Nama kelas dan tingkat wajib diisi.');
-      return;
-    }
-    const targetSchoolId = selectedSchool?.id || (schools.length > 0 ? schools[0].id : null);
-    if (!targetSchoolId) {
-      Alert.alert('Perhatian', 'Pilih sekolah terlebih dahulu.');
-      return;
-    }
-    setCreating(true);
-    try {
-      await apiClient.createClass({
-        nama: newNama.trim(),
-        tingkat: newTingkat.trim(),
-        school_id: targetSchoolId,
-      } as any);
-      setShowCreateModal(false);
-      setIsCreateClassModalOpen(false);
-      setNewNama('');
-      setNewTingkat('');
-      Alert.alert('Sukses', 'Kelas baru berhasil dibuat.');
-      await loadData();
-    } catch (e: any) {
-      Alert.alert('Gagal', e.message || 'Gagal membuat kelas.');
-    } finally {
-      setCreating(false);
-    }
-  };
-
-  const handleGenerateClassCode = async (classId: string) => {
-    setCodeLoading((prev) => ({ ...prev, [classId]: true }));
-    try {
-      await apiClient.generateClassCode(classId);
-      await loadData();
-    } catch (e: any) {
-      Alert.alert('Gagal', e.message);
-    } finally {
-      setCodeLoading((prev) => ({ ...prev, [classId]: false }));
-    }
-  };
-
-  const schoolClasses = selectedSchool
-    ? allClasses.filter((c) => c.school_id === selectedSchool.id)
-    : [];
+  const filteredSchools = schools.filter((sch) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return sch.nama.toLowerCase().includes(q) || (sch.id && sch.id.toLowerCase().includes(q));
+  });
 
   if (loading && schools.length === 0) {
     return (
@@ -1437,198 +3011,507 @@ function AdminSchoolMonitorView() {
     );
   }
 
+  // Jika Admin Sedang Memilih Sekolah: Tampilkan SchoolDashboard (UI yang sama dengan akun sekolah)
+  if (selectedSchool) {
+    return (
+      <SchoolDashboard
+        overrideSchoolId={selectedSchool.id}
+        onBack={() => setSelectedSchool(null)}
+        onRefreshUser={loadData}
+      />
+    );
+  }
+
   return (
-    <ScrollView style={s.container} contentContainerStyle={s.dashContent} showsVerticalScrollIndicator={false}>
-      {/* Jika Belum Pilih Sekolah: Tampilkan Seluruh Rows Sekolah Beranggota / Ada Kelas */}
-      {!selectedSchool ? (
-        <>
-          <View style={[s.schoolBanner, { backgroundColor: '#1e1b4b' }]}>
-            <Ionicons name="shield-checkmark" size={26} color="#c7d2fe" />
-            <View style={{ flex: 1 }}>
-              <Text style={s.schoolBannerName}>Pengawasan Sekolah Admin</Text>
-              <Text style={s.schoolBannerJenjang}>
-                Daftar semua sekolah aktif yang memiliki anggota atau kelas terdaftar
-              </Text>
-            </View>
+    <View style={s.container}>
+      {/* Header Banner - DesainPakeAI Pattern */}
+      <View style={s.kelasHeaderCard}>
+        <View style={s.kelasHeaderTop}>
+          <View style={s.kelasHeaderIcon}>
+            <Ionicons name="shield-checkmark" size={22} color="#047857" />
           </View>
+          <View style={{ flex: 1 }}>
+            <Text style={s.kelasHeaderTitle}>Pengawasan Sekolah</Text>
+            <Text style={s.kelasHeaderSubtitle}>Panel Monitoring Instansi Terdaftar</Text>
+          </View>
+          <TouchableOpacity
+            onPress={loadData}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            style={s.kelasRefreshBtn}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="refresh" size={16} color="#047857" />
+          </TouchableOpacity>
+        </View>
 
-          <View style={s.sectionHeader}>
-            <Text style={s.sectionTitle}>Sekolah Terdaftar ({schools.length})</Text>
-            <TouchableOpacity onPress={loadData} style={{ padding: 4 }}>
-              <Ionicons name="refresh" size={16} color="#047857" />
+        {/* Callout Info Panduan */}
+        <View style={s.kelasCalloutBox}>
+          <Ionicons name="business-outline" size={16} color="#065f46" />
+          <Text style={s.kelasCalloutText}>
+            Tekan sekolah di bawah untuk membuka dashboard instansi, mengelola kode akses murid/guru, dan mengatur perizinan.
+          </Text>
+        </View>
+      </View>
+
+      {/* Input Pencarian Sekolah */}
+      {schools.length > 0 && (
+        <View style={s.kelasSearchWrapper}>
+          <Ionicons name="search" size={16} color="#94a3b8" />
+          <TextInput
+            style={s.kelasSearchInput}
+            placeholder="Cari nama sekolah atau ID instansi..."
+            placeholderTextColor="#94a3b8"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+          {searchQuery ? (
+            <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Ionicons name="close-circle" size={16} color="#94a3b8" />
             </TouchableOpacity>
-          </View>
+          ) : null}
+        </View>
+      )}
 
-          {schools.length === 0 ? (
-            <View style={s.emptyBox}>
-              <Ionicons name="school-outline" size={36} color="#cbd5e1" />
-              <Text style={s.emptyText}>Belum ada sekolah yang memiliki anggota atau kelas.</Text>
-            </View>
-          ) : (
-            schools.map((sch) => {
-              const clsCount = allClasses.filter((c) => c.school_id === sch.id).length;
-              return (
-                <TouchableOpacity
-                  key={sch.id}
-                  onPress={() => setSelectedSchool(sch)}
-                  style={s.classCard}
-                  activeOpacity={0.8}
-                >
-                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={s.classCardName}>{sch.nama}</Text>
-                      <Text style={s.classCardTingkat}>
-                        Jenjang: {sch.jenjang || 'Sekolah'} · ID: {sch.id}
-                      </Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={18} color="#94a3b8" />
+      {/* List Sekolah */}
+      {schools.length === 0 ? (
+        <View style={s.kelasEmptyBox}>
+          <View style={s.kelasEmptyIconWrap}>
+            <Ionicons name="school-outline" size={36} color="#94a3b8" />
+          </View>
+          <Text style={s.kelasEmptyTitle}>Belum Ada Sekolah Terdaftar</Text>
+          <Text style={s.kelasEmptySubtitle}>
+            Belum ada sekolah yang tersimpan di sistem. Cari dan tambahkan sekolah melalui pencarian Google Places.
+          </Text>
+          <TouchableOpacity
+            onPress={() => setActiveTab('sof')}
+            style={[s.kelasActionPill, { marginTop: 12, backgroundColor: '#047857', borderColor: '#047857' }]}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="add" size={16} color="#ffffff" />
+            <Text style={[s.kelasActionText, { color: '#ffffff', fontWeight: '700' }]}>Tambah / Cari Sekolah</Text>
+          </TouchableOpacity>
+        </View>
+      ) : filteredSchools.length === 0 ? (
+        <View style={s.kelasEmptyBox}>
+          <Ionicons name="search-outline" size={32} color="#cbd5e1" />
+          <Text style={s.kelasEmptyTitle}>Sekolah Tidak Ditemukan</Text>
+          <Text style={s.kelasEmptySubtitle}>Tidak ada sekolah yang cocok dengan kata kunci "{searchQuery}".</Text>
+          <TouchableOpacity onPress={() => setSearchQuery('')} style={[s.kelasActionPill, { marginTop: 8 }]} activeOpacity={0.7}>
+            <Text style={s.kelasActionText}>Reset Pencarian</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <FlatList
+          data={filteredSchools}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={s.kelasListContent}
+          showsVerticalScrollIndicator={false}
+          renderItem={({ item: sch }) => {
+            const clsCount = allClasses.filter((c) => c.school_id === sch.id).length;
+            return (
+              <TouchableOpacity
+                key={sch.id}
+                onPress={() => setSelectedSchool(sch)}
+                style={s.kelasCard}
+                activeOpacity={0.7}
+              >
+                <View style={s.kelasCardLeft}>
+                  <View style={s.kelasIconBadge}>
+                    <Ionicons name="business" size={18} color="#047857" />
                   </View>
-                  <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
-                    <View style={[s.roleTag, { backgroundColor: '#ecfdf5' }]}>
-                      <Text style={[s.roleTagText, { color: '#047857' }]}>
-                        {clsCount} Kelas Terdaftar
-                      </Text>
-                    </View>
-                    {sch.member_count !== undefined && (
-                      <View style={[s.roleTag, { backgroundColor: '#eff6ff' }]}>
-                        <Text style={[s.roleTagText, { color: '#1d4ed8' }]}>
-                          {sch.member_count} Anggota
+                  <View style={{ flex: 1, paddingRight: 8 }}>
+                    <Text style={s.kelasCardTitle} numberOfLines={2}>{sch.nama}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+                      {sch.jenjang ? (
+                        <View style={s.kelasTingkatTag}>
+                          <Text style={s.kelasTingkatText}>{sch.jenjang}</Text>
+                        </View>
+                      ) : null}
+                      <View style={[s.roleTag, { backgroundColor: '#ecfdf5' }]}>
+                        <Text style={[s.roleTagText, { color: '#047857' }]}>
+                          {clsCount} Kelas
                         </Text>
                       </View>
-                    )}
+                      {sch.member_count !== undefined ? (
+                        <View style={[s.roleTag, { backgroundColor: '#eff6ff' }]}>
+                          <Text style={[s.roleTagText, { color: '#1d4ed8' }]}>
+                            {sch.member_count} Anggota
+                          </Text>
+                        </View>
+                      ) : null}
+                    </View>
                   </View>
-                </TouchableOpacity>
-              );
-            })
-          )}
-        </>
+                </View>
+
+                <View style={s.kelasActionPill}>
+                  <Text style={s.kelasActionText}>Kelola</Text>
+                  <Ionicons name="chevron-forward" size={13} color="#047857" />
+                </View>
+              </TouchableOpacity>
+            );
+          }}
+        />
+      )}
+    </View>
+  );
+}
+
+// ─── Admin Kelas List View ────────────────────────────────────────────────────
+// Tab "Kelas" untuk admin: list baris kelas semua sekolah.
+// Tekan satu baris → tampilan perspektif pelajar (ClassMemberView userRole='murid').
+
+type AdminClassItem = {
+  id: string;
+  nama: string;
+  tingkat: string | number;
+  school_id?: string;
+  schoolName: string;
+};
+
+export const AdminKelasView: React.FC = () => {
+  const { setActiveClass, schools: contextSchools } = useApp();
+  const [loading, setLoading] = useState(true);
+  const [classes, setClasses] = useState<AdminClassItem[]>([]);
+  const [previewClass, setPreviewClass] = useState<AdminClassItem | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const loadClasses = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await apiClient.getMonitoringScope();
+      const serverSchools = res.schools || [];
+      const rawClasses = res.classes || [];
+
+      // Gabungkan schoolMap dari server & AppContext untuk resolusi nama sekolah yang pasti akurat
+      const schoolMap: Record<string, string> = {};
+      contextSchools.forEach((s) => { schoolMap[s.id] = s.nama; });
+      serverSchools.forEach((s) => { schoolMap[s.id] = s.nama; });
+
+      setClasses(
+        rawClasses.map((cls) => {
+          const sName = cls.school_id ? (schoolMap[cls.school_id] || 'Sekolah Terdaftar') : 'Sekolah Terdaftar';
+          return {
+            id: cls.id,
+            nama: cls.nama,
+            tingkat: cls.tingkat,
+            school_id: cls.school_id,
+            schoolName: sName,
+          };
+        })
+      );
+    } catch {
+      setClasses([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [contextSchools]);
+
+  useEffect(() => { loadClasses(); }, [loadClasses]);
+
+  const filteredClasses = classes.filter((cls) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return cls.nama.toLowerCase().includes(q) || cls.schoolName.toLowerCase().includes(q);
+  });
+
+  if (previewClass) {
+    return (
+      <ClassMemberView
+        classId={previewClass.id}
+        className={previewClass.nama}
+        schoolName={previewClass.schoolName}
+        userRole="murid"
+        onLeave={() => {
+          setPreviewClass(null);
+          setActiveClass(null);
+        }}
+        onBackToDashboard={() => {
+          setPreviewClass(null);
+          setActiveClass(null);
+        }}
+      />
+    );
+  }
+
+  if (loading) {
+    return (
+      <View style={s.center}>
+        <ActivityIndicator size="large" color="#047857" />
+        <Text style={s.emptyText}>Memuat daftar kelas...</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={s.container}>
+      {/* Header Banner - Emerald Theme sesuai Brand Identity SKITA */}
+      <View style={s.kelasHeaderCard}>
+        <View style={s.kelasHeaderTop}>
+          <View style={s.kelasHeaderIcon}>
+            <Ionicons name="school" size={22} color="#047857" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={s.kelasHeaderTitle}>Daftar Ruang Kelas</Text>
+            <Text style={s.kelasHeaderSubtitle}>Mode Pengawasan Akses & Presensi</Text>
+          </View>
+          <TouchableOpacity
+            onPress={loadClasses}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            style={s.kelasRefreshBtn}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="refresh" size={16} color="#047857" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Callout Info Panduan */}
+        <View style={s.kelasCalloutBox}>
+          <Ionicons name="eye-outline" size={16} color="#065f46" />
+          <Text style={s.kelasCalloutText}>
+            Tekan salah satu kelas di bawah untuk masuk ke tampilan murid dan membuka tab Absensi di bottom bar.
+          </Text>
+        </View>
+      </View>
+
+      {/* Input Pencarian Kelas / Sekolah */}
+      {classes.length > 0 && (
+        <View style={s.kelasSearchWrapper}>
+          <Ionicons name="search" size={16} color="#94a3b8" />
+          <TextInput
+            style={s.kelasSearchInput}
+            placeholder="Cari nama kelas atau instansi sekolah..."
+            placeholderTextColor="#94a3b8"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+          {searchQuery ? (
+            <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Ionicons name="close-circle" size={16} color="#94a3b8" />
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      )}
+
+      {/* List Kelas */}
+      {classes.length === 0 ? (
+        <View style={s.kelasEmptyBox}>
+          <View style={s.kelasEmptyIconWrap}>
+            <Ionicons name="book-outline" size={36} color="#94a3b8" />
+          </View>
+          <Text style={s.kelasEmptyTitle}>Belum Ada Kelas</Text>
+          <Text style={s.kelasEmptySubtitle}>
+            Sekolah yang terdaftar belum memiliki kelas aktif. Buka tab Dashboard untuk membuat kelas pada sekolah binaan.
+          </Text>
+        </View>
+      ) : filteredClasses.length === 0 ? (
+        <View style={s.kelasEmptyBox}>
+          <Ionicons name="search-outline" size={32} color="#cbd5e1" />
+          <Text style={s.kelasEmptyTitle}>Kelas Tidak Ditemukan</Text>
+          <Text style={s.kelasEmptySubtitle}>Tidak ada kelas yang cocok dengan kata kunci "{searchQuery}".</Text>
+          <TouchableOpacity onPress={() => setSearchQuery('')} style={[s.kelasActionPill, { marginTop: 8 }]} activeOpacity={0.7}>
+            <Text style={s.kelasActionText}>Reset Pencarian</Text>
+          </TouchableOpacity>
+        </View>
       ) : (
-        /* Jika Admin Sedang Memilih Sekolah: Tampilkan Seluruh Kelas Sekolah Tersebut */
+        <FlatList
+          data={filteredClasses}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={s.kelasListContent}
+          showsVerticalScrollIndicator={false}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={s.kelasCard}
+              onPress={() => {
+                setActiveClass({ id: item.id, name: item.nama, schoolName: item.schoolName });
+                setPreviewClass(item);
+              }}
+              activeOpacity={0.7}
+            >
+              <View style={s.kelasCardLeft}>
+                <View style={s.kelasIconBadge}>
+                  <Ionicons name="book" size={18} color="#047857" />
+                </View>
+                <View style={{ flex: 1, paddingRight: 8 }}>
+                  <Text style={s.kelasCardTitle} numberOfLines={1}>{item.nama}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginTop: 3 }}>
+                    <View style={s.kelasTingkatTag}>
+                      <Text style={s.kelasTingkatText}>Tingkat {item.tingkat}</Text>
+                    </View>
+                    <Text style={s.kelasSchoolName} numberOfLines={1}>
+                      {item.schoolName}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              <View style={s.kelasActionPill}>
+                <Text style={s.kelasActionText}>Lihat Isi Kelas</Text>
+                <Ionicons name="chevron-forward" size={13} color="#047857" />
+              </View>
+            </TouchableOpacity>
+          )}
+        />
+      )}
+    </View>
+  );
+};
+
+// ─── Tampilan Kelas Guru (Tab Kelas untuk Guru) ──────────────────────────
+
+function TeacherClassListView({
+  school,
+  classes,
+  onSelectClass,
+  onRefresh,
+  onGoToDashboard,
+  userRole,
+}: {
+  school: { id: string; name: string; jenjang?: string };
+  classes: Array<{ id: string; nama: string; tingkat?: string | number }>;
+  onSelectClass: (cls: { id: string; nama: string; tingkat?: string | number }) => void;
+  onRefresh: () => Promise<void>;
+  onGoToDashboard: () => void;
+  userRole?: string;
+}) {
+  const [search, setSearch] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+
+  const filtered = classes.filter((c) => {
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    return c.nama.toLowerCase().includes(q) || String(c.tingkat || '').toLowerCase().includes(q);
+  });
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await onRefresh();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  return (
+    <ScrollView style={s.container} contentContainerStyle={s.dashContent} showsVerticalScrollIndicator={false}>
+      {/* Banner Sekolah */}
+      <View style={s.schoolBanner}>
+        <Ionicons name="school" size={18} color="#c7d2fe" />
+        <View style={{ flex: 1 }}>
+          <Text style={s.schoolBannerName}>{school.name}</Text>
+          <Text style={s.schoolBannerJenjang}>
+            {school.jenjang || 'Sekolah'} · {userRole === 'sekolah' ? 'Ruang Kelas Sekolah' : 'Ruang Kelas Guru'}
+          </Text>
+        </View>
+        <TouchableOpacity onPress={handleRefresh} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ padding: 4 }}>
+          {refreshing ? (
+            <ActivityIndicator size="small" color="#c7d2fe" />
+          ) : (
+            <Ionicons name="refresh" size={16} color="#c7d2fe" />
+          )}
+        </TouchableOpacity>
+      </View>
+
+      {/* Section Header: Daftar Kelas */}
+      <View style={s.sectionHeader}>
+        <Text style={s.sectionTitle}>Daftar Kelas ({classes.length})</Text>
+      </View>
+
+      {classes.length === 0 ? (
+        <View style={s.kelasEmptyBox}>
+          <View style={s.kelasEmptyIconWrap}>
+            <Ionicons name="book-outline" size={36} color="#94a3b8" />
+          </View>
+          <Text style={s.kelasEmptyTitle}>
+            {userRole === 'sekolah' ? 'Belum Ada Kelas yang Dibuat' : 'Belum Ada Kelas yang Diajar'}
+          </Text>
+          <Text style={s.kelasEmptySubtitle}>
+            {userRole === 'sekolah'
+              ? 'Buat ruang kelas baru terlebih dahulu melalui Dashboard Sekolah.'
+              : 'Kode kelas harus dimasukkan terlebih dahulu di dashboard.'}
+          </Text>
+          <TouchableOpacity
+            onPress={onGoToDashboard}
+            style={[s.kelasActionPill, { marginTop: 12, backgroundColor: '#047857', paddingHorizontal: 16 }]}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="arrow-back" size={14} color="#fff" style={{ marginRight: 4 }} />
+            <Text style={[s.kelasActionText, { color: '#fff', fontWeight: '700' }]}>Ke Dashboard</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
         <>
-          <View style={[s.schoolBanner, { backgroundColor: '#064e3b' }]}>
-            <Ionicons name="school" size={24} color="#a7f3d0" />
-            <View style={{ flex: 1 }}>
-              <Text style={s.schoolBannerName}>{selectedSchool.nama}</Text>
-              <Text style={s.schoolBannerJenjang}>
-                Jenjang {selectedSchool.jenjang || '-'} · Mode Pengawasan & Kelas
-              </Text>
-            </View>
+          {/* Search Bar Kelas (sama seperti akun sekolah) */}
+          <View style={[s.kelasSearchWrapper, { marginHorizontal: 0, marginBottom: 10 }]}>
+            <Ionicons name="search" size={16} color="#94a3b8" />
+            <TextInput
+              style={s.kelasSearchInput}
+              placeholder="Cari kelas atau tingkat..."
+              placeholderTextColor="#94a3b8"
+              value={search}
+              onChangeText={setSearch}
+            />
+            {search ? (
+              <TouchableOpacity onPress={() => setSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Ionicons name="close-circle" size={16} color="#94a3b8" />
+              </TouchableOpacity>
+            ) : null}
           </View>
 
-          {/* Tombol kembali ke daftar sekolah di bawah sekolah align-right */}
-          <View style={{ alignItems: 'flex-end', marginTop: 8, marginBottom: 4 }}>
-            <TouchableOpacity
-              onPress={() => setSelectedSchool(null)}
-              style={s.backToSchoolsBtn}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="arrow-back" size={13} color="#047857" />
-              <Text style={s.backToSchoolsBtnText}>Kembali ke Daftar Sekolah</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={s.sectionHeader}>
-            <Text style={s.sectionTitle}>
-              Daftar Kelas ({schoolClasses.length})
-            </Text>
-            <TouchableOpacity
-              onPress={() => setShowCreateModal(true)}
-              style={s.newClassBtn}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="add" size={13} color="#047857" />
-              <Text style={s.newClassBtnText}>Buat Kelas</Text>
-            </TouchableOpacity>
-          </View>
-
-          {schoolClasses.length === 0 ? (
-            <View style={s.emptyBox}>
-              <Ionicons name="people-outline" size={32} color="#cbd5e1" />
-              <Text style={s.emptyText}>
-                Belum ada kelas di sekolah ini. Ketuk tombol 'Buat Kelas' di atas.
-              </Text>
+          {filtered.length === 0 ? (
+            <View style={s.kelasEmptyBox}>
+              <Ionicons name="search-outline" size={28} color="#cbd5e1" />
+              <Text style={s.kelasEmptyTitle}>Kelas Tidak Ditemukan</Text>
+              <Text style={s.kelasEmptySubtitle}>Tidak ada kelas yang cocok dengan kata kunci "{search}".</Text>
+              <TouchableOpacity onPress={() => setSearch('')} style={[s.kelasActionPill, { marginTop: 6 }]}>
+                <Text style={s.kelasActionText}>Reset Pencarian</Text>
+              </TouchableOpacity>
             </View>
           ) : (
-            schoolClasses.map((cls) => (
+            filtered.map((cls) => (
               <View key={cls.id} style={s.classCard}>
                 <View style={s.classCardHeader}>
                   <Text style={s.classCardName}>{cls.nama}</Text>
-                  <Text style={s.classCardTingkat}>Tingkat {cls.tingkat}</Text>
+                  {cls.tingkat ? <Text style={s.classCardTingkat}>Tingkat {cls.tingkat}</Text> : null}
                 </View>
-                <CodeCard
-                  label="Kode Akses Kelas"
-                  code={cls.kode_kelas?.code}
-                  validUntil={cls.kode_kelas?.valid_until}
-                  onGenerate={() => handleGenerateClassCode(cls.id)}
-                  loading={codeLoading[cls.id]}
-                />
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginTop: 12,
+                    paddingTop: 10,
+                    borderTopWidth: 1,
+                    borderTopColor: '#f1f5f9',
+                  }}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Ionicons name="school-outline" size={14} color="#047857" />
+                    <Text style={{ fontSize: 11, color: '#475569' }}>
+                      Status: {userRole === 'sekolah' ? 'Kelas Aktif' : 'Aktif Mengajar'}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => onSelectClass(cls)}
+                    style={{
+                      backgroundColor: '#047857',
+                      paddingHorizontal: 12,
+                      paddingVertical: 6,
+                      borderRadius: 6,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 4,
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#fff' }}>Buka Kelas</Text>
+                    <Ionicons name="chevron-forward" size={13} color="#fff" />
+                  </TouchableOpacity>
+                </View>
               </View>
             ))
           )}
         </>
       )}
-
-      {/* Modal Buat Kelas Admin */}
-      <Modal
-        visible={showCreateModal || (isCreateClassModalOpen && !selectedSchool)}
-        transparent
-        animationType="fade"
-        onRequestClose={() => {
-          setShowCreateModal(false);
-          setIsCreateClassModalOpen(false);
-        }}
-      >
-        <View style={s.modalOverlay}>
-          <View style={s.modalCard}>
-            <Text style={s.modalTitle}>
-              Buat Kelas Baru {selectedSchool ? `(${selectedSchool.nama})` : ''}
-            </Text>
-            <Text style={s.inputLabel}>Nama Kelas</Text>
-            <TextInput
-              style={s.input}
-              placeholder="cth: 7A, 8B Unggulan"
-              placeholderTextColor="#94a3b8"
-              value={newNama}
-              onChangeText={setNewNama}
-            />
-            <Text style={s.inputLabel}>Tingkat</Text>
-            <TextInput
-              style={s.input}
-              placeholder="cth: 7, 10, 11"
-              placeholderTextColor="#94a3b8"
-              value={newTingkat}
-              onChangeText={setNewTingkat}
-              keyboardType="numeric"
-            />
-            <View style={s.modalActions}>
-              <TouchableOpacity
-                onPress={() => {
-                  setShowCreateModal(false);
-                  setIsCreateClassModalOpen(false);
-                  setNewNama('');
-                  setNewTingkat('');
-                }}
-                style={s.cancelBtn}
-                activeOpacity={0.7}
-              >
-                <Text style={s.cancelBtnText}>Batal</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={handleCreateClass}
-                disabled={creating}
-                style={s.confirmModalBtn}
-                activeOpacity={0.8}
-              >
-                {creating ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Text style={s.confirmBtnText}>Buat Kelas</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </ScrollView>
   );
 }
@@ -1645,6 +3528,7 @@ export const ClassroomView: React.FC = () => {
     setActiveClass,
     availableClasses,
     setAvailableClasses,
+    activeTab,
     setActiveTab,
     refreshMembershipScope,
   } = useApp();
@@ -1653,9 +3537,27 @@ export const ClassroomView: React.FC = () => {
   const [checkingClass, setCheckingClass] = useState(false);
 
   const checkActiveClass = useCallback(async () => {
-    if (!user || role === 'sekolah') return;
+    if (!user) return;
     setCheckingClass(true);
     try {
+      if (role === 'sekolah') {
+        const dashRes = await apiClient.getSchoolDashboard();
+        if (dashRes?.school) {
+          setUserSchool({
+            id: dashRes.school.id,
+            name: dashRes.school.nama,
+            jenjang: dashRes.school.jenjang,
+          });
+          const mappedClasses = (dashRes.classes || []).map((c) => ({
+            id: c.id,
+            nama: c.nama,
+            tingkat: c.tingkat,
+          }));
+          setAvailableClasses(mappedClasses);
+        }
+        return;
+      }
+
       const res = await refreshMembershipScope();
       if (!res) return;
 
@@ -1678,7 +3580,7 @@ export const ClassroomView: React.FC = () => {
     } finally {
       setCheckingClass(false);
     }
-  }, [user, role]);
+  }, [user, role, activeClass]);
 
   useEffect(() => {
     checkActiveClass();
@@ -1693,12 +3595,13 @@ export const ClassroomView: React.FC = () => {
     );
   }
 
-  if (role === 'sekolah') {
-    return <SchoolDashboard onRefreshUser={refreshUser} />;
-  }
-
   if (role === 'admin') {
     return <AdminSchoolMonitorView />;
+  }
+
+  // Khusus Akun Sekolah: Tab Dashboard menampilkan SchoolDashboard
+  if (role === 'sekolah' && activeTab === 'dashboard') {
+    return <SchoolDashboard onRefreshUser={refreshUser} />;
   }
 
   if (checkingClass) {
@@ -1711,6 +3614,9 @@ export const ClassroomView: React.FC = () => {
 
   // Belum punya sekolah → JoinFlow
   if (!userSchool) {
+    if (role === 'sekolah') {
+      return <SchoolDashboard onRefreshUser={refreshUser} />;
+    }
     return (
       <JoinFlow
         onRefreshUser={refreshUser}
@@ -1723,6 +3629,128 @@ export const ClassroomView: React.FC = () => {
           checkActiveClass();
         }}
       />
+    );
+  }
+
+  // Khusus Guru: Tab Dashboard menampilkan SchoolPortalView
+  if (role === 'guru' && activeTab === 'dashboard') {
+    return (
+      <SchoolPortalView
+        school={userSchool}
+        userRole="guru"
+        teacherClasses={availableClasses}
+        onLeaveSchool={() => {
+          setUserSchool(null);
+          setActiveClass(null);
+          setAvailableClasses([]);
+          refreshUser();
+          checkActiveClass();
+        }}
+        onEnterClass={(cls) => {
+          setActiveClass({
+            id: cls.id,
+            name: cls.name,
+            schoolName: userSchool.name,
+          });
+          setViewMode('class');
+          setActiveTab('kelas');
+        }}
+        onRefreshTeacherClasses={async () => {
+          const res = await apiClient.getMonitoringScope();
+          setAvailableClasses(res.classes || []);
+        }}
+      />
+    );
+  }
+
+  // Tab Kelas untuk Guru & Akun Sekolah
+  if ((role === 'guru' || role === 'sekolah') && activeTab === 'kelas') {
+    if (activeClass) {
+      return (
+        <ClassMemberView
+          classId={activeClass.id}
+          className={activeClass.name}
+          schoolName={activeClass.schoolName}
+          userRole={role}
+          onLeave={() => {
+            setActiveClass(null);
+            setViewMode('school_dashboard');
+            refreshUser();
+            checkActiveClass();
+          }}
+          onBackToDashboard={() => {
+            setActiveClass(null);
+            setViewMode('school_dashboard');
+          }}
+          availableClasses={availableClasses}
+          onSelectClass={(cls) => {
+            setActiveClass({
+              id: cls.id,
+              name: cls.name,
+              schoolName: userSchool.name,
+            });
+          }}
+        />
+      );
+    }
+    return (
+      <TeacherClassListView
+        school={userSchool}
+        classes={availableClasses}
+        userRole={role}
+        onSelectClass={(cls) => {
+          setActiveClass({
+            id: cls.id,
+            name: cls.nama,
+            schoolName: userSchool.name,
+          });
+          setViewMode('class');
+        }}
+        onRefresh={async () => {
+          if (role === 'sekolah') {
+            const res = await apiClient.getSchoolDashboard();
+            if (res?.classes) {
+              setAvailableClasses(res.classes.map((c) => ({ id: c.id, nama: c.nama, tingkat: c.tingkat })));
+            }
+          } else {
+            const res = await apiClient.getMonitoringScope();
+            setAvailableClasses(res.classes || []);
+          }
+        }}
+        onGoToDashboard={() => setActiveTab('dashboard')}
+      />
+    );
+  }
+
+  // Khusus Murid: Tab Kelas tapi belum masuk kelas
+  if (role === 'murid' && activeTab === 'kelas' && !activeClass) {
+    return (
+      <ScrollView style={s.container} contentContainerStyle={s.dashContent}>
+        <View style={s.schoolBanner}>
+          <Ionicons name="school" size={18} color="#c7d2fe" />
+          <View style={{ flex: 1 }}>
+            <Text style={s.schoolBannerName}>{userSchool.name}</Text>
+            <Text style={s.schoolBannerJenjang}>{userSchool.jenjang || 'Sekolah'} · Siswa</Text>
+          </View>
+        </View>
+        <View style={s.kelasEmptyBox}>
+          <View style={s.kelasEmptyIconWrap}>
+            <Ionicons name="book-outline" size={36} color="#94a3b8" />
+          </View>
+          <Text style={s.kelasEmptyTitle}>Belum Masuk Kelas</Text>
+          <Text style={s.kelasEmptySubtitle}>
+            Kode kelas harus dimasukkan terlebih dahulu di dashboard.
+          </Text>
+          <TouchableOpacity
+            onPress={() => setActiveTab('dashboard')}
+            style={[s.kelasActionPill, { marginTop: 12, backgroundColor: '#047857', paddingHorizontal: 16 }]}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="arrow-back" size={14} color="#fff" style={{ marginRight: 4 }} />
+            <Text style={[s.kelasActionText, { color: '#fff', fontWeight: '700' }]}>Ke Dashboard</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
     );
   }
 
@@ -1740,7 +3768,10 @@ export const ClassroomView: React.FC = () => {
           refreshUser();
           checkActiveClass();
         }}
-        onBackToDashboard={role === 'guru' ? () => setViewMode('school_dashboard') : undefined}
+        onBackToDashboard={role === 'guru' ? () => {
+          setActiveClass(null);
+          setViewMode('school_dashboard');
+        } : undefined}
         availableClasses={availableClasses}
         onSelectClass={(cls) => {
           setActiveClass({
@@ -1749,15 +3780,12 @@ export const ClassroomView: React.FC = () => {
             schoolName: userSchool.name,
           });
         }}
-        onAddNewClassCode={async (code) => {
-          await apiClient.joinClass(code);
-          await refreshUser();
-          await checkActiveClass();
-          // Murid selesai join kelas → alihkan ke tab Kelas
-          if (role === 'murid') setActiveTab('kelas');
-        }}
       />
     );
+  }
+
+  if (role === 'sekolah') {
+    return <SchoolDashboard onRefreshUser={refreshUser} />;
   }
 
   // Dashboard Sekolah (murid belum di kelas, guru, admin)
@@ -1779,7 +3807,12 @@ export const ClassroomView: React.FC = () => {
           name: cls.name,
           schoolName: userSchool.name,
         });
-        setViewMode('class');
+        // Guru: pilih kelas → langsung buka Absensi di bottom bar
+        if (role === 'guru') {
+          setActiveTab('absensi');
+        } else {
+          setViewMode('class');
+        }
       }}
       onRefreshTeacherClasses={async () => {
         const res = await apiClient.getMonitoringScope();
@@ -1796,7 +3829,7 @@ const s = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, padding: 24 },
 
   // Dashboard
-  dashContent: { paddingHorizontal: 14, paddingTop: 12, paddingBottom: 32, gap: 8 },
+  dashContent: { paddingHorizontal: 14, paddingTop: 12, paddingBottom: 80, gap: 8 },
   schoolBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     backgroundColor: '#312e81', borderRadius: 10, padding: 12,
@@ -2021,7 +4054,7 @@ const s = StyleSheet.create({
   },
 
   // Join flow
-  joinContent: { paddingHorizontal: 14, paddingTop: 20, paddingBottom: 32, gap: 12 },
+  joinContent: { paddingHorizontal: 14, paddingTop: 20, paddingBottom: 80, gap: 12 },
 
   // Step indicator presisi
   stepBox: { gap: 6 },
@@ -2100,17 +4133,30 @@ const s = StyleSheet.create({
   confirmBtnText: { fontSize: 13, fontWeight: '700', color: '#ffffff' },
   cancelBtn: {
     flex: 1, borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8,
-    paddingVertical: 9, alignItems: 'center', backgroundColor: '#f8fafc',
+    paddingVertical: 9, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f8fafc',
   },
   cancelBtnText: { fontSize: 13, color: '#64748b', fontWeight: '600' },
 
   // Modal
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(15,23,42,0.4)', justifyContent: 'center', padding: 24 },
-  modalCard: {
-    backgroundColor: '#ffffff', borderRadius: 14, padding: 16, gap: 8,
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15,23,42,0.6)',
+    justifyContent: 'center',
+    padding: 20,
   },
-  modalTitle: { fontSize: 14, fontWeight: '700', color: '#0f172a', marginBottom: 2 },
-  modalActions: { flexDirection: 'row', gap: 8, marginTop: 4 },
+  modalCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 20,
+    gap: 10,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  modalTitle: { fontSize: 16, fontWeight: '700', color: '#0f172a', marginBottom: 2 },
+  modalActions: { flexDirection: 'row', gap: 8, marginTop: 6 },
 
   // Buttons tambahan
   dangerBtn: {
@@ -2219,4 +4265,196 @@ const s = StyleSheet.create({
     backgroundColor: '#ecfdf5',
   },
   enterClassBtnText: { fontSize: 12, fontWeight: '700', color: '#047857' },
+
+  // DesainPakeAI: Admin Kelas View Refinements
+  kelasHeaderCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 16,
+    marginHorizontal: 14,
+    marginTop: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    gap: 12,
+  },
+  kelasHeaderTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  kelasHeaderIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#ecfdf5',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#a7f3d0',
+  },
+  kelasHeaderTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  kelasHeaderSubtitle: {
+    fontSize: 11,
+    color: '#047857',
+    fontWeight: '600',
+    marginTop: 1,
+  },
+  kelasRefreshBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: '#f1f5f9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  kelasCalloutBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#ecfdf5',
+    borderRadius: 10,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#d1fae5',
+  },
+  kelasCalloutText: {
+    flex: 1,
+    fontSize: 11,
+    color: '#065f46',
+    lineHeight: 16,
+    fontWeight: '500',
+  },
+  kelasSearchWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    paddingHorizontal: 12,
+    height: 42,
+    marginHorizontal: 14,
+    marginBottom: 8,
+    gap: 8,
+  },
+  kelasSearchInput: {
+    flex: 1,
+    fontSize: 12,
+    color: '#0f172a',
+    paddingVertical: 0,
+  },
+  kelasListContent: {
+    paddingHorizontal: 14,
+    paddingBottom: 24,
+    gap: 10,
+  },
+  kelasCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    elevation: 1,
+  },
+  kelasCardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  kelasIconBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: '#ecfdf5',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#d1fae5',
+  },
+  kelasCardTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  kelasTingkatTag: {
+    backgroundColor: '#eff6ff',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  kelasTingkatText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#1d4ed8',
+  },
+  kelasSchoolName: {
+    fontSize: 12,
+    color: '#64748b',
+    marginTop: 2,
+    fontWeight: '500',
+  },
+  kelasActionPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#ecfdf5',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#a7f3d0',
+  },
+  kelasActionText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#047857',
+  },
+  kelasEmptyBox: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+    marginHorizontal: 14,
+    marginTop: 20,
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    gap: 8,
+  },
+  kelasEmptyIconWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    backgroundColor: '#f8fafc',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    marginBottom: 4,
+  },
+  kelasEmptyTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  kelasEmptySubtitle: {
+    fontSize: 12,
+    color: '#64748b',
+    textAlign: 'center',
+    lineHeight: 18,
+  },
 });

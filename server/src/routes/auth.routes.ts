@@ -29,7 +29,7 @@ function safeUser(user: User) {
 
 // POST /api/auth/register (FR-A15)
 // Role field dari klien diabaikan — pendaftar baru selalu 'pengguna'
-router.post('/register', (req: Request, res: Response) => {
+router.post('/register', async (req: Request, res: Response) => {
   const { nama, email, password } = req.body;
 
   if (!nama || !email || !password) {
@@ -60,7 +60,7 @@ router.post('/register', (req: Request, res: Response) => {
   };
 
   db.users.set(newUser.id, newUser);
-  persistUser(newUser);
+  await persistUser(newUser);
 
   res.status(201).json({
     success: true,

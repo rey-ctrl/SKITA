@@ -13,6 +13,7 @@ import { db } from '../db/store.js';
 import { authMiddleware, requireRole, AuthRequest } from '../middleware/auth.js';
 import { SchoolClass, ClassPeriod, AuditLog } from '../types/index.js';
 import { generateRandomCode, getNextMondayWib } from '../utils/codes.js';
+import { persistClass, persistPeriod, persistAccessCode, persistAuditLog, persistSchoolMembership } from '../db/postgres.js';
 import bcrypt from 'bcryptjs';
 
 const router = Router();
@@ -112,6 +113,7 @@ router.post('/claim', (req: AuthRequest, res: Response) => {
 
   const log = auditEntry(userId, 'claim_school', 'school_config', resolvedSchoolId, { school_id: resolvedSchoolId, role });
   db.auditLog.set(log.id, log);
+  persistAuditLog(log);
 
   if (role !== 'admin') {
     res.json({ success: true, message: 'Sekolah berhasil diklaim.', school_id: resolvedSchoolId });
@@ -123,17 +125,40 @@ router.post('/claim', (req: AuthRequest, res: Response) => {
 // ---------------------------------------------------------------------------
 // GET /api/school-dashboard/me
 // Akun 'sekolah' melihat data sekolah, kode aktif, kelas, dan guru pending.
+// Admin dapat melihat spesifik sekolah via query param ?school_id=...
 // ---------------------------------------------------------------------------
 router.get('/me', (req: AuthRequest, res: Response) => {
   const userId = req.user!.userId;
+  const role = req.user!.role;
+  const querySchoolId = req.query.school_id as string | undefined;
 
-  const cfg = getOwnedSchool(userId, req.user!.role);
-  if (!cfg) {
-    res.status(404).json({ success: false, message: 'Belum ada sekolah yang dikaitkan ke akun ini. Lakukan klaim terlebih dahulu.' });
-    return;
+  let schoolId: string | null = null;
+  let schoolName: string = '';
+  let schoolJenjang: string = '';
+  let autoApprove = false;
+
+  if (role === 'admin' && querySchoolId) {
+    const s = db.schools.get(querySchoolId);
+    if (!s) {
+      res.status(404).json({ success: false, message: 'Sekolah tidak ditemukan.' });
+      return;
+    }
+    schoolId = s.id;
+    schoolName = s.nama;
+    schoolJenjang = s.jenjang;
+    const existingCfg = db.schoolConfigs.get(s.id);
+    autoApprove = existingCfg?.auto_approve_teacher ?? false;
+  } else {
+    const cfg = getOwnedSchool(userId, role);
+    if (!cfg) {
+      res.status(404).json({ success: false, message: 'Belum ada sekolah yang dikaitkan ke akun ini. Lakukan klaim terlebih dahulu.' });
+      return;
+    }
+    schoolId = cfg.id;
+    schoolName = cfg.nama;
+    schoolJenjang = cfg.jenjang;
+    autoApprove = cfg.auto_approve_teacher ?? false;
   }
-
-  const schoolId = cfg.id;
 
   // Kode aktif sekolah (murid + guru)
   const schoolCodes = [...db.accessCodes.values()].filter(
@@ -157,21 +182,31 @@ router.get('/me', (req: AuthRequest, res: Response) => {
       };
     });
 
-  // Guru pending approval
-  const pendingGuru = [...db.schoolMemberships.values()]
-    .filter((m) => m.school_id === schoolId && m.role === 'guru' && m.status === 'pending')
-    .map((m) => {
+  // Guru pending approval (deduplikasi per user_id agar orang yang sama hanya muncul sekali)
+  const seenPendingUserIds = new Set<string>();
+  const pendingGuru: Array<{ membership_id: string; user_id: string; nama: string; email: string; joined_at: string }> = [];
+  for (const m of db.schoolMemberships.values()) {
+    if (m.school_id === schoolId && m.role === 'guru' && m.status === 'pending') {
+      if (seenPendingUserIds.has(m.user_id)) continue;
+      seenPendingUserIds.add(m.user_id);
       const u = db.users.get(m.user_id);
-      return { membership_id: m.id, user_id: m.user_id, nama: u?.nama ?? '?', email: u?.email ?? '?', joined_at: m.joined_at };
-    });
+      pendingGuru.push({
+        membership_id: m.id,
+        user_id: m.user_id,
+        nama: u?.nama ?? '?',
+        email: u?.email ?? '?',
+        joined_at: m.joined_at,
+      });
+    }
+  }
 
   res.json({
     success: true,
     school: {
-      id: cfg.id,
-      nama: cfg.nama,
-      jenjang: cfg.jenjang,
-      auto_approve_teacher: cfg.auto_approve_teacher ?? false,
+      id: schoolId,
+      nama: schoolName,
+      jenjang: schoolJenjang,
+      auto_approve_teacher: autoApprove,
     },
     codes: schoolCodes.map((c) => ({ id: c.id, scope: c.scope, code: c.code, valid_until: c.valid_until })),
     classes,
@@ -182,7 +217,7 @@ router.get('/me', (req: AuthRequest, res: Response) => {
 // ---------------------------------------------------------------------------
 // POST /api/school-dashboard/classes — buat kelas baru untuk sekolah ini
 // ---------------------------------------------------------------------------
-router.post('/classes', (req: AuthRequest, res: Response) => {
+router.post('/classes', async (req: AuthRequest, res: Response) => {
   const userId = req.user!.userId;
   const role = req.user!.role;
   let targetSchoolId: string | null = null;
@@ -222,6 +257,7 @@ router.post('/classes', (req: AuthRequest, res: Response) => {
     created_at: new Date().toISOString(),
   };
   db.classes.set(kelas.id, kelas);
+  await persistClass(kelas);
 
   // Buat period aktif otomatis
   const period: ClassPeriod = {
@@ -231,6 +267,7 @@ router.post('/classes', (req: AuthRequest, res: Response) => {
     is_active: true,
   };
   db.periods.set(period.id, period);
+  await persistPeriod(period);
 
   // Auto-generate kode kelas
   let code: string;
@@ -251,9 +288,11 @@ router.post('/classes', (req: AuthRequest, res: Response) => {
     is_active: true,
   };
   db.accessCodes.set(accessCode.id, accessCode);
+  await persistAccessCode(accessCode);
 
   const log = auditEntry(userId, 'create_class', 'class', kelas.id, { school_id: targetSchoolId, nama, tingkat });
   db.auditLog.set(log.id, log);
+  await persistAuditLog(log);
 
   res.status(201).json({
     success: true,
@@ -267,13 +306,34 @@ router.post('/classes', (req: AuthRequest, res: Response) => {
 // ---------------------------------------------------------------------------
 router.patch('/settings', (req: AuthRequest, res: Response) => {
   const userId = req.user!.userId;
-  const cfg = getOwnedSchool(userId, req.user!.role);
+  const role = req.user!.role;
+  const { auto_approve_teacher, school_id } = req.body as { auto_approve_teacher?: boolean; school_id?: string };
+
+  let cfg: any = null;
+  if (role === 'admin' && school_id) {
+    let sCfg = db.schoolConfigs.get(school_id);
+    if (!sCfg) {
+      const sch = db.schools.get(school_id);
+      if (sch) {
+        sCfg = {
+          ...sch,
+          owner_user_id: userId,
+          auto_approve_teacher: false,
+          created_at: new Date().toISOString(),
+        } as any;
+        db.schoolConfigs.set(sch.id, sCfg!);
+      }
+    }
+    cfg = sCfg;
+  } else {
+    cfg = getOwnedSchool(userId, role);
+  }
+
   if (!cfg) {
     res.status(403).json({ success: false, message: 'Akun belum dikaitkan ke sekolah.' });
     return;
   }
 
-  const { auto_approve_teacher } = req.body as { auto_approve_teacher?: boolean };
   if (typeof auto_approve_teacher === 'boolean') {
     cfg.auto_approve_teacher = auto_approve_teacher;
     db.schoolConfigs.set(cfg.id, cfg);
@@ -287,26 +347,37 @@ router.patch('/settings', (req: AuthRequest, res: Response) => {
 // ---------------------------------------------------------------------------
 router.patch('/guru/:membership_id/approve', (req: AuthRequest, res: Response) => {
   const userId = req.user!.userId;
-  const cfg = getOwnedSchool(userId, req.user!.role);
-  if (!cfg) {
-    res.status(403).json({ success: false, message: 'Akun belum dikaitkan ke sekolah.' });
-    return;
-  }
+  const role = req.user!.role;
 
   const membershipId = String(req.params.membership_id);
   const membership = db.schoolMemberships.get(membershipId);
 
-  if (!membership || membership.school_id !== cfg.id) {
+  if (!membership) {
     res.status(404).json({ success: false, message: 'Keanggotaan tidak ditemukan.' });
     return;
   }
+
+  if (role !== 'admin') {
+    const cfg = getOwnedSchool(userId, role);
+    if (!cfg || membership.school_id !== cfg.id) {
+      res.status(403).json({ success: false, message: 'Anda tidak memiliki hak akses untuk sekolah ini.' });
+      return;
+    }
+  }
+
   if (membership.status !== 'pending') {
     res.status(400).json({ success: false, message: 'Keanggotaan sudah diproses.' });
     return;
   }
 
-  membership.status = 'aktif';
-  db.schoolMemberships.set(membershipId, membership);
+  // Setujui dan bersihkan semua record pending untuk user ini di sekolah ini
+  for (const m of db.schoolMemberships.values()) {
+    if (m.user_id === membership.user_id && m.school_id === membership.school_id && m.status === 'pending') {
+      m.status = 'aktif';
+      db.schoolMemberships.set(m.id, m);
+      persistSchoolMembership(m);
+    }
+  }
 
   // Update user.role ke 'guru'
   const u = db.users.get(membership.user_id);
@@ -316,8 +387,9 @@ router.patch('/guru/:membership_id/approve', (req: AuthRequest, res: Response) =
     db.users.set(u.id, u);
   }
 
-  const log = auditEntry(userId, 'approve_guru', 'school_membership', membershipId, { school_id: cfg.id });
+  const log = auditEntry(userId, 'approve_guru', 'school_membership', membershipId, { school_id: membership.school_id });
   db.auditLog.set(log.id, log);
+  persistAuditLog(log);
 
   res.json({ success: true, message: 'Guru disetujui.' });
 });

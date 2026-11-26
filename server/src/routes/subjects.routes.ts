@@ -3,6 +3,7 @@ import { db } from '../db/store.js';
 import { authMiddleware, requireRole, AuthRequest } from '../middleware/auth.js';
 import { Subject, TeacherSubject } from '../types/index.js';
 import { SUBJECT_TEMPLATES } from '../data/subjectTemplates.js';
+import { persistSubject, persistTeacherSubject, removeSubject } from '../db/postgres.js';
 
 const router = Router();
 router.use(authMiddleware);
@@ -110,6 +111,7 @@ router.post(
         is_active: true,
       };
       db.subjects.set(subj.id, subj);
+      persistSubject(subj);
       created.push(subj);
     }
 
@@ -143,6 +145,7 @@ router.patch(
 
     subject.is_active = !subject.is_active;
     db.subjects.set(subjectId, subject);
+    persistSubject(subject);
 
     res.json({ success: true, subject });
   }
@@ -189,6 +192,7 @@ router.post(
       is_active: true,
     };
     db.subjects.set(subj.id, subj);
+    persistSubject(subj);
 
     res.status(201).json({ success: true, subject: subj });
   }
@@ -297,6 +301,7 @@ router.post('/school/:school_id/teacher', requireRole('guru', 'sekolah', 'admin'
       subject_id: sid,
     };
     db.teacherSubjects.set(ts.id, ts);
+    persistTeacherSubject(ts);
     saved.push(ts);
   }
 

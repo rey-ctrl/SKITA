@@ -221,3 +221,76 @@ test('GET /api/assignments/history/attendance/:class/:period — murid ditolak 4
   });
   assert.equal(res.status, 403);
 });
+
+// Penugasan Kelas: Auto-seed sample tugas jika kosong
+test('GET /api/assignments/class/:class_id — auto-seed sample tugas saat kelas kosong', async () => {
+  const freshClassId = 'cls_seed_sample_test';
+  const res = await fetch(`${baseUrl}/api/assignments/class/${freshClassId}`, {
+    headers: { Authorization: `Bearer ${muridToken}` },
+  });
+  assert.equal(res.status, 200);
+  const json = await res.json();
+  assert.equal(json.success, true);
+  assert.ok(json.assignments.length >= 2, 'Harus ada contoh tugas auto-seed');
+  const judulList = json.assignments.map((a) => a.judul);
+  assert.ok(judulList.some((j) => j.includes('Matematika')));
+  assert.ok(judulList.some((j) => j.includes('Biologi')));
+});
+
+// Pengumpulan Tugas: Berkas Foto, Word, Excel, PDF dan Deadline Lock
+test('POST /api/assignments/:id/submit — murid kumpul berkas dan terkunci saat deadline habis', async () => {
+  // Tugas 1: Deadline masa depan (aktif)
+  const activeAsgnId = 'asgn_test_active';
+  db.assignments.set(activeAsgnId, {
+    id: activeAsgnId,
+    class_id: CLASS_ID,
+    period_id: PERIOD_NEW,
+    creator_id: guruUserId,
+    judul: 'Tugas Aktif Lampiran',
+    deadline: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
+    tanggal: '2026-11-22',
+  });
+
+  const submitRes = await fetch(`${baseUrl}/api/assignments/${activeAsgnId}/submit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${muridToken}` },
+    body: JSON.stringify({
+      catatan: 'Lampiran pengerjaan tugas lengkap',
+      files: [
+        { name: 'Jawaban_Foto.jpg', type: 'photo', size: 1200000 },
+        { name: 'Dokumen_Analisis.docx', type: 'word', size: 350000 },
+        { name: 'Tabel_Hitung.xlsx', type: 'excel', size: 210000 },
+        { name: 'Berkas_Laporan.pdf', type: 'pdf', size: 2400000 },
+      ],
+    }),
+  });
+  assert.equal(submitRes.status, 201);
+  const submitJson = await submitRes.json();
+  assert.equal(submitJson.success, true);
+  assert.equal(submitJson.submission.files.length, 4);
+
+  // Tugas 2: Deadline sudah lewat (terkunci)
+  const expiredAsgnId = 'asgn_test_expired';
+  db.assignments.set(expiredAsgnId, {
+    id: expiredAsgnId,
+    class_id: CLASS_ID,
+    period_id: PERIOD_NEW,
+    creator_id: guruUserId,
+    judul: 'Tugas Terkunci',
+    deadline: new Date(Date.now() - 3600 * 1000).toISOString(),
+    tanggal: '2026-11-22',
+  });
+
+  const lockRes = await fetch(`${baseUrl}/api/assignments/${expiredAsgnId}/submit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${muridToken}` },
+    body: JSON.stringify({
+      catatan: 'Coba kumpul telat',
+      files: [{ name: 'Telat.pdf', type: 'pdf', size: 1000 }],
+    }),
+  });
+  assert.equal(lockRes.status, 403);
+  const lockJson = await lockRes.json();
+  assert.equal(lockJson.success, false);
+  assert.ok(lockJson.message.toLowerCase().includes('tenggat'));
+});

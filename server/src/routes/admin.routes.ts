@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { db } from '../db/store.js';
 import { authMiddleware, requireRole, AuthRequest } from '../middleware/auth.js';
 import { User, GlobalRole, AuditLog } from '../types/index.js';
+import { persistAuditLog } from '../db/postgres.js';
 
 const router = Router();
 router.use(authMiddleware, requireRole('admin'));
@@ -101,6 +102,7 @@ router.post('/users', (req: AuthRequest, res: Response) => {
 
   const log = auditEntry(actorId, 'admin_create_user', 'user', newUser.id, { role, email: newUser.email });
   db.auditLog.set(log.id, log);
+  persistAuditLog(log);
 
   res.status(201).json({ success: true, user: safeUser(newUser) });
 });
@@ -139,6 +141,7 @@ router.patch('/users/:id/role', (req: AuthRequest, res: Response) => {
 
   const log = auditEntry(actorId, 'admin_change_role', 'user', targetId, { from: oldRole, to: role });
   db.auditLog.set(log.id, log);
+  persistAuditLog(log);
 
   res.json({ success: true, user: safeUser(target) });
 });
@@ -170,6 +173,7 @@ router.patch('/users/:id/deactivate', (req: AuthRequest, res: Response) => {
 
   const log = auditEntry(actorId, 'admin_deactivate_user', 'user', targetId);
   db.auditLog.set(log.id, log);
+  persistAuditLog(log);
 
   res.json({ success: true, message: 'Akun berhasil dinonaktifkan.' });
 });
@@ -206,6 +210,7 @@ router.patch('/users/:id/reset-password', (req: AuthRequest, res: Response) => {
 
   const log = auditEntry(actorId, 'admin_reset_password', 'user', targetId);
   db.auditLog.set(log.id, log);
+  persistAuditLog(log);
 
   const payload: Record<string, any> = { success: true, message: 'Password berhasil direset.' };
   if (generated) payload.temp_password = newPassword;
@@ -249,6 +254,7 @@ router.delete('/users/:id', (req: AuthRequest, res: Response) => {
     deleted_user: { nama: target.nama, email: target.email, role: target.role },
   });
   db.auditLog.set(log.id, log);
+  persistAuditLog(log);
 
   res.json({ success: true, message: `Akun ${target.nama} berhasil dihapus permanen.` });
 });

@@ -5,15 +5,29 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
+  ActivityIndicator,
   Alert,
 } from 'react-native';
 import { useApp } from '../context/AppContext';
 import { Ionicons } from '@expo/vector-icons';
+import { apiClient } from '../services/api';
 import { AdminPanelScreen } from './AdminPanelScreen';
 
 interface ProfileScreenProps {
   mode?: 'umum' | 'sekolah';
 }
+
+type AttendanceStatus = 'hadir' | 'sakit' | 'izin' | 'alpa';
+
+const STATUS_CONFIG: Record<
+  AttendanceStatus,
+  { label: string; color: string; bg: string; border: string; icon: any }
+> = {
+  hadir: { label: 'Hadir', color: '#047857', bg: '#ecfdf5', border: '#a7f3d0', icon: 'checkmark-circle' },
+  sakit: { label: 'Sakit', color: '#1d4ed8', bg: '#eff6ff', border: '#bfdbfe', icon: 'medkit' },
+  izin: { label: 'Izin', color: '#7c3aed', bg: '#f5f3ff', border: '#ddd6fe', icon: 'document-text' },
+  alpa: { label: 'Alpa', color: '#dc2626', bg: '#fef2f2', border: '#fecaca', icon: 'close-circle' },
+};
 
 export const ProfileScreen: React.FC<ProfileScreenProps> = ({ mode = 'umum' }) => {
   const {
@@ -28,12 +42,30 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ mode = 'umum' }) =
     setActiveTab,
   } = useApp();
 
+  const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
+  const [attendanceRecords, setAttendanceRecords] = useState<any[]>([]);
+  const [loadingAttendance, setLoadingAttendance] = useState(false);
+
   // Sinkronisasi data user dari server setiap masuk ke tab Profil
   useEffect(() => {
     refreshUser();
-  }, []);
+    // Murid dibatasi dari akses riwayat presensi & absensi pada profil (FR-A10 Privasi & UU PDP)
+    if (mode === 'sekolah' && user && user.role !== 'murid') {
+      setLoadingAttendance(true);
+      apiClient
+        .getMyAttendanceHistory()
+        .then((res) => {
+          if (res.records) setAttendanceRecords(res.records);
+        })
+        .catch(() => setAttendanceRecords([]))
+        .finally(() => setLoadingAttendance(false));
+    }
+  }, [mode, user?.id, user?.role]);
 
-  const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
+  const hadirCount = attendanceRecords.filter((r) => r.status === 'hadir').length;
+  const sakitCount = attendanceRecords.filter((r) => r.status === 'sakit').length;
+  const izinCount = attendanceRecords.filter((r) => r.status === 'izin').length;
+  const alpaCount = attendanceRecords.filter((r) => r.status === 'alpa').length;
 
   if (isAdminPanelOpen) {
     return <AdminPanelScreen onClose={() => setIsAdminPanelOpen(false)} />;
@@ -51,7 +83,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ mode = 'umum' }) =
             <Ionicons name="school" size={24} color="#047857" />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.schoolHeaderTitle}>Profil Warga Sekolah</Text>
+            <Text style={styles.schoolHeaderTitle}>Profil</Text>
             <Text style={styles.schoolHeaderSubtitle}>
               {userSchool?.name || 'Sistem Terpadu SKITA'}
             </Text>
@@ -117,14 +149,123 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ mode = 'umum' }) =
             </Text>
           </View>
 
-          <View style={styles.infoRow}>
-            <Ionicons name="shield-outline" size={16} color="#047857" />
-            <Text style={styles.infoRowLabel}>ID Pengguna:</Text>
-            <Text style={styles.infoRowValue} numberOfLines={1}>
-              {user?.id || '-'}
-            </Text>
-          </View>
         </View>
+
+        {/* Riwayat Absensi & Ringkasan Presensi (Hanya guru/admin yang berwenang, murid tidak bisa akses) */}
+        {user?.role !== 'murid' && (
+          <View style={styles.attendanceSectionCard}>
+            <View style={styles.attendanceSectionHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+                <View style={styles.attendanceIconBadge}>
+                  <Ionicons name="finger-print" size={20} color="#047857" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.attendanceSectionTitle}>Riwayat Presensi & Absensi</Text>
+                  <Text style={styles.attendanceSectionSubtitle}>Rekapitulasi kehadiran bulan ini</Text>
+                </View>
+              </View>
+              {activeClass && (
+                <TouchableOpacity
+                  onPress={() => setActiveTab('absensi')}
+                  style={styles.openAttendanceBtn}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.openAttendanceText}>Tab Absensi</Text>
+                  <Ionicons name="chevron-forward" size={12} color="#047857" />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* 4-Stat Grid: Hadir, Sakit, Izin, Alpa */}
+            <View style={styles.statsGrid}>
+              <View style={[styles.statBox, { backgroundColor: '#ecfdf5', borderColor: '#a7f3d0' }]}>
+                <View style={styles.statBoxHeader}>
+                  <Ionicons name="checkmark-circle" size={13} color="#047857" />
+                  <Text style={[styles.statBoxLabel, { color: '#065f46' }]}>Hadir</Text>
+                </View>
+                <Text style={[styles.statBoxValue, { color: '#047857' }]}>{hadirCount}</Text>
+              </View>
+
+              <View style={[styles.statBox, { backgroundColor: '#eff6ff', borderColor: '#bfdbfe' }]}>
+                <View style={styles.statBoxHeader}>
+                  <Ionicons name="medkit" size={13} color="#1d4ed8" />
+                  <Text style={[styles.statBoxLabel, { color: '#1e40af' }]}>Sakit</Text>
+                </View>
+                <Text style={[styles.statBoxValue, { color: '#1d4ed8' }]}>{sakitCount}</Text>
+              </View>
+
+              <View style={[styles.statBox, { backgroundColor: '#f5f3ff', borderColor: '#ddd6fe' }]}>
+                <View style={styles.statBoxHeader}>
+                  <Ionicons name="document-text" size={13} color="#7c3aed" />
+                  <Text style={[styles.statBoxLabel, { color: '#5b21b6' }]}>Izin</Text>
+                </View>
+                <Text style={[styles.statBoxValue, { color: '#7c3aed' }]}>{izinCount}</Text>
+              </View>
+
+              <View style={[styles.statBox, { backgroundColor: '#fef2f2', borderColor: '#fecaca' }]}>
+                <View style={styles.statBoxHeader}>
+                  <Ionicons name="close-circle" size={13} color="#dc2626" />
+                  <Text style={[styles.statBoxLabel, { color: '#991b1b' }]}>Alpa</Text>
+                </View>
+                <Text style={[styles.statBoxValue, { color: '#dc2626' }]}>{alpaCount}</Text>
+              </View>
+            </View>
+
+            {/* List Riwayat Presensi Terakhir */}
+            {loadingAttendance ? (
+              <View style={{ paddingVertical: 18, alignItems: 'center' }}>
+                <ActivityIndicator size="small" color="#047857" />
+                <Text style={[styles.emptySubtext, { marginTop: 6 }]}>Memuat riwayat kehadiran...</Text>
+              </View>
+            ) : attendanceRecords.length === 0 ? (
+              <View style={styles.emptyAttendanceBox}>
+                <Ionicons name="calendar-outline" size={28} color="#94a3b8" />
+                <Text style={styles.emptyAttendanceTitle}>Belum Ada Riwayat Absensi</Text>
+                <Text style={styles.emptySubtext}>
+                  Kehadiran yang diisi akan tercatat secara otomatis di sini dan dapat dipantau oleh sekolah.
+                </Text>
+                {activeClass && (
+                  <TouchableOpacity
+                    onPress={() => setActiveTab('absensi')}
+                    style={styles.fillAttendanceShortcut}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="finger-print" size={14} color="#047857" />
+                    <Text style={styles.fillAttendanceShortcutText}>Isi Kehadiran Sekarang</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            ) : (
+              <View style={{ gap: 8, marginTop: 4 }}>
+                {attendanceRecords.slice(0, 5).map((rec) => {
+                  const cfg = STATUS_CONFIG[rec.status as AttendanceStatus] || STATUS_CONFIG.hadir;
+                  return (
+                    <View key={rec.id || rec.tanggal} style={styles.attendanceRecordRow}>
+                      <View style={styles.attendanceRecordLeft}>
+                        <View style={[styles.attendanceRecordIcon, { backgroundColor: cfg.bg, borderColor: cfg.border }]}>
+                          <Ionicons name={cfg.icon} size={15} color={cfg.color} />
+                        </View>
+                        <View>
+                          <Text style={styles.attendanceRecordDate}>{rec.tanggal}</Text>
+                          <Text style={styles.attendanceRecordClass}>{rec.class_name || activeClass?.name || 'Kelas'}</Text>
+                        </View>
+                      </View>
+
+                      <View style={{ alignItems: 'flex-end', gap: 2 }}>
+                        <View style={[styles.statusPill, { backgroundColor: cfg.bg, borderColor: cfg.border }]}>
+                          <Text style={[styles.statusPillText, { color: cfg.color }]}>{cfg.label}</Text>
+                        </View>
+                        {rec.is_koreksi_guru && (
+                          <Text style={styles.verifiedText}>Diverifikasi Guru</Text>
+                        )}
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+          </View>
+        )}
 
         {/* Perlindungan Privasi Akademik (UU PDP) */}
         <View style={styles.pdpCard}>
@@ -599,6 +740,178 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#ffffff',
   },
+  // DesainPakeAI: Attendance Section Refinements in Profile
+  attendanceSectionCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    gap: 14,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    elevation: 1,
+  },
+  attendanceSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  attendanceIconBadge: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    backgroundColor: '#ecfdf5',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#a7f3d0',
+  },
+  attendanceSectionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  attendanceSectionSubtitle: {
+    fontSize: 11,
+    color: '#64748b',
+    fontWeight: '500',
+    marginTop: 1,
+  },
+  openAttendanceBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    backgroundColor: '#ecfdf5',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#a7f3d0',
+  },
+  openAttendanceText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#047857',
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  statBox: {
+    flex: 1,
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 6,
+    alignItems: 'center',
+    gap: 3,
+  },
+  statBoxHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  statBoxLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  statBoxValue: {
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  attendanceRecordRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#f8fafc',
+    borderRadius: 10,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+  },
+  attendanceRecordLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  attendanceRecordIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  attendanceRecordDate: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  attendanceRecordClass: {
+    fontSize: 10,
+    color: '#64748b',
+    marginTop: 1,
+  },
+  statusPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  statusPillText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  verifiedText: {
+    fontSize: 9,
+    color: '#047857',
+    fontWeight: '600',
+  },
+  emptyAttendanceBox: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 20,
+    paddingHorizontal: 12,
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    gap: 6,
+  },
+  emptyAttendanceTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  emptySubtext: {
+    fontSize: 11,
+    color: '#64748b',
+    textAlign: 'center',
+    lineHeight: 16,
+  },
+  fillAttendanceShortcut: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#ecfdf5',
+    borderWidth: 1,
+    borderColor: '#a7f3d0',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginTop: 6,
+  },
+  fillAttendanceShortcutText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#047857',
+  },
+
   versionFooter: {
     fontSize: 10,
     color: '#94a3b8',

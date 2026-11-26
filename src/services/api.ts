@@ -270,7 +270,10 @@ class SkitaApiClient {
     );
   }
 
-  async getSchoolDashboard() {
+  async getSchoolDashboard(schoolId?: string) {
+    const url = schoolId
+      ? `/api/school-dashboard/me?school_id=${encodeURIComponent(schoolId)}`
+      : '/api/school-dashboard/me';
     return this.request<{
       success: boolean;
       school: { id: string; nama: string; jenjang: string; auto_approve_teacher: boolean };
@@ -280,10 +283,10 @@ class SkitaApiClient {
         kode_kelas: { id: string; code: string; valid_until: string } | null;
       }>;
       pending_guru: Array<{ membership_id: string; user_id: string; nama: string; email: string; joined_at: string }>;
-    }>('/api/school-dashboard/me');
+    }>(url);
   }
 
-  async createClass(data: { nama: string; tingkat: string | number }) {
+  async createClass(data: { nama: string; tingkat: string | number; school_id?: string }) {
     return this.request<{
       success: boolean;
       class: { id: string; nama: string; tingkat: string | number; kode_kelas: { id: string; code: string; valid_until: string } };
@@ -297,7 +300,7 @@ class SkitaApiClient {
     );
   }
 
-  async updateSchoolSettings(data: { auto_approve_teacher: boolean }) {
+  async updateSchoolSettings(data: { auto_approve_teacher: boolean; school_id?: string }) {
     return this.request<{ success: boolean; auto_approve_teacher: boolean }>(
       '/api/school-dashboard/settings',
       { method: 'PATCH', body: JSON.stringify(data) }
@@ -361,7 +364,7 @@ class SkitaApiClient {
     return this.request<{
       role: string;
       kelas?: { id: string; nama: string; tingkat: string | number } | null;
-      classes?: Array<{ id: string; nama: string; tingkat: string | number }>;
+      classes?: Array<{ id: string; nama: string; tingkat: string | number; school_id?: string }>;
       school?: { id: string; nama: string } | null;
       schools?: Array<{ id: string; nama: string; jenjang?: string; member_count?: number; class_count?: number }>;
     }>('/api/monitoring/scope');
@@ -448,6 +451,129 @@ class SkitaApiClient {
         is_koreksi_guru: boolean;
       }>;
     }>(`/api/attendance/my-history${q}`);
+  }
+
+  // ── Penugasan / Assignments (FR-A12) ─────────────────────────────────────────
+
+  async getClassAssignments(classId: string) {
+    return this.request<{
+      success: boolean;
+      total: number;
+      assignments: Array<{
+        id: string;
+        class_id: string;
+        period_id: string;
+        judul: string;
+        deskripsi?: string;
+        deadline?: string;
+        subject_id?: string;
+        subject_nama?: string;
+        tanggal: string;
+        guru_nama: string;
+        submission_count?: number;
+        my_submission?: {
+          id: string;
+          assignment_id: string;
+          murid_id: string;
+          murid_nama?: string;
+          submitted_at: string;
+          catatan?: string;
+          files: Array<{ name: string; type: string; size?: string | number; url?: string }>;
+        } | null;
+        attachments?: Array<{ name: string; type: string; size?: string | number; url?: string }>;
+        is_submitted?: boolean;
+      }>;
+    }>(`/api/assignments/class/${encodeURIComponent(classId)}`);
+  }
+
+  async createAssignment(data: {
+    class_id: string;
+    judul: string;
+    deskripsi?: string;
+    deadline?: string;
+    subject_id?: string;
+    subject_nama?: string;
+    tanggal?: string;
+    attachments?: Array<{ name: string; type: string; size?: string | number; url?: string }>;
+  }) {
+    return this.request<{ success: boolean; assignment: any }>('/api/assignments', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async submitAssignment(
+    assignmentId: string,
+    data: {
+      catatan?: string;
+      files: Array<{ name: string; type: string; size?: string | number; url?: string }>;
+    }
+  ) {
+    return this.request<{ success: boolean; message: string; submission: any }>(
+      `/api/assignments/${encodeURIComponent(assignmentId)}/submit`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }
+    );
+  }
+
+  async getAssignmentSubmissions(assignmentId: string) {
+    return this.request<{
+      success: boolean;
+      total: number;
+      submissions: Array<{
+        id: string;
+        assignment_id: string;
+        murid_id: string;
+        murid_nama?: string;
+        submitted_at: string;
+        catatan?: string;
+        files: Array<{ name: string; type: string; size?: string | number; url?: string }>;
+      }>;
+    }>(`/api/assignments/${encodeURIComponent(assignmentId)}/submissions`);
+  }
+
+  // ── Kurikulum & Mata Pelajaran (FR-A3) ────────────────────────────────────────
+
+  async getSchoolSubjects(schoolId: string) {
+    return this.request<{
+      success: boolean;
+      subjects: Array<{ id: string; school_id: string; nama: string; is_custom: boolean; is_active: boolean }>;
+    }>(`/api/subjects/school/${encodeURIComponent(schoolId)}`);
+  }
+
+  async generateSchoolSubjects(schoolId: string, data: { jenjang: string; status: string }) {
+    return this.request<{ success: boolean; message: string; subjects: any[] }>(
+      `/api/subjects/school/${encodeURIComponent(schoolId)}/generate`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }
+    );
+  }
+
+  async getTeacherSubjects(schoolId: string, teacherId: string) {
+    return this.request<{
+      success: boolean;
+      teacher_subjects: Array<{
+        id: string;
+        user_id: string;
+        school_id: string;
+        subject_id: string;
+        subject?: { id: string; nama: string };
+      }>;
+    }>(`/api/subjects/school/${encodeURIComponent(schoolId)}/teacher/${encodeURIComponent(teacherId)}`);
+  }
+
+  async setTeacherSubjects(schoolId: string, data: { user_id?: string; subject_ids: string[] }) {
+    return this.request<{ success: boolean; teacher_subjects: any[] }>(
+      `/api/subjects/school/${encodeURIComponent(schoolId)}/teacher`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }
+    );
   }
 
   // ── Pembubaran Kelas (FR-A11) ────────────────────────────────────────────────

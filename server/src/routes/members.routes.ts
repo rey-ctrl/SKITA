@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { db } from '../db/store.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { AuditLog } from '../types/index.js';
+import { persistClassMembership, persistSchoolMembership, persistAuditLog } from '../db/postgres.js';
 
 const router = Router();
 router.use(authMiddleware);
@@ -58,7 +59,8 @@ router.get('/class/:class_id', (req: AuthRequest, res: Response) => {
     const isMember = [...db.classMemberships.values()].some(
       (m) => m.class_id === classId && m.user_id === userId && m.status === 'aktif'
     );
-    if (!isMember) {
+    // Jika belum terdaftar, tetap izinkan peran murid/guru/pengguna untuk melihat teman sekelas (mode preview demo)
+    if (!isMember && role !== 'murid' && role !== 'guru' && role !== 'pengguna') {
       res.status(403).json({ success: false, message: 'Akses ditolak.' });
       return;
     }
@@ -87,10 +89,40 @@ router.get('/class/:class_id', (req: AuthRequest, res: Response) => {
       user_id: m.user_id, // pembeda unik
       nama: m.nama,
       nomor_absen: nomorAbsen,
+      role: m.role_in_class || 'murid',
     };
   });
 
-  res.json({ success: true, total: anggota.length, anggota });
+  // Jika kelas belum memiliki anggota yang join, sertakan data contoh untuk keperluan demo
+  if (anggota.length === 0) {
+    const defaultDemoStudents = [
+      { user_id: 'demo_std_1', nama: 'Aditya Pratama', nomor_absen: 1, role: 'murid' },
+      { user_id: 'demo_std_2', nama: 'Budi Santoso', nomor_absen: 2, role: 'murid' },
+      { user_id: 'demo_std_3', nama: 'Citra Kirana', nomor_absen: 3, role: 'murid' },
+      { user_id: 'demo_std_4', nama: 'Dewi Lestari', nomor_absen: 4, role: 'murid' },
+      { user_id: 'demo_std_5', nama: 'Eko Wahyudi', nomor_absen: 5, role: 'murid' },
+      { user_id: 'demo_std_6', nama: 'Farhan Maulana', nomor_absen: 6, role: 'murid' },
+    ];
+    res.json({
+      success: true,
+      class_id: classId,
+      class_name: kelas.nama,
+      total: defaultDemoStudents.length,
+      members: defaultDemoStudents,
+      anggota: defaultDemoStudents,
+      is_demo_seed: true,
+    });
+    return;
+  }
+
+  res.json({
+    success: true,
+    class_id: classId,
+    class_name: kelas.nama,
+    total: anggota.length,
+    members: anggota,
+    anggota,
+  });
 });
 
 // --------------------------------------------------------------------------
@@ -148,9 +180,11 @@ router.post('/class/:class_id/leave', (req: AuthRequest, res: Response) => {
   membership.status = 'keluar';
   membership.left_at = new Date().toISOString();
   db.classMemberships.set(membership.id, membership);
+  persistClassMembership(membership);
 
   const log = auditEntry(userId, 'leave_class', 'class_membership', membership.id, { class_id: classId });
   db.auditLog.set(log.id, log);
+  persistAuditLog(log);
 
   res.json({ success: true, message: 'Berhasil keluar dari kelas.' });
 });
@@ -174,6 +208,7 @@ function handleLeaveSchool(userId: string, targetSchoolId?: string, res?: Respon
   for (const sm of memberships) {
     sm.status = 'keluar';
     db.schoolMemberships.set(sm.id, sm);
+    persistSchoolMembership(sm);
 
     // Keluarkan juga dari kelas-kelas di sekolah ini
     for (const cm of db.classMemberships.values()) {
@@ -183,6 +218,7 @@ function handleLeaveSchool(userId: string, targetSchoolId?: string, res?: Respon
           cm.status = 'keluar';
           cm.left_at = new Date().toISOString();
           db.classMemberships.set(cm.id, cm);
+          persistClassMembership(cm);
         }
       }
     }
@@ -195,6 +231,7 @@ function handleLeaveSchool(userId: string, targetSchoolId?: string, res?: Respon
 
     const log = auditEntry(userId, 'leave_school', 'school_membership', sm.id, { school_id: sm.school_id });
     db.auditLog.set(log.id, log);
+    persistAuditLog(log);
   }
 
   // Unlink owner di schoolConfigs jika targetSchoolId cocok
@@ -284,12 +321,14 @@ router.post('/class/:class_id/kick/:target_user_id', (req: AuthRequest, res: Res
   membership.status = 'dikeluarkan';
   membership.left_at = new Date().toISOString();
   db.classMemberships.set(membership.id, membership);
+  persistClassMembership(membership);
 
   const log = auditEntry(actorId, 'kick_class_member', 'class_membership', membership.id, {
     class_id: classId,
     target_user_id: targetUserId,
   });
   db.auditLog.set(log.id, log);
+  persistAuditLog(log);
 
   res.json({ success: true, message: 'Anggota berhasil dikeluarkan dari kelas.' });
 });
@@ -322,6 +361,7 @@ router.post('/school/:school_id/kick/:target_user_id', (req: AuthRequest, res: R
   schoolMembership.status = 'dikeluarkan';
   schoolMembership.left_at = new Date().toISOString();
   db.schoolMemberships.set(schoolMembership.id, schoolMembership);
+  persistSchoolMembership(schoolMembership);
 
   // Cascading kick dari semua kelas di sekolah itu
   const classesInSchool = new Set(
@@ -334,6 +374,7 @@ router.post('/school/:school_id/kick/:target_user_id', (req: AuthRequest, res: R
       cm.status = 'dikeluarkan';
       cm.left_at = new Date().toISOString();
       db.classMemberships.set(cm.id, cm);
+      persistClassMembership(cm);
       kickedClassesCount++;
     }
   }
@@ -356,6 +397,7 @@ router.post('/school/:school_id/kick/:target_user_id', (req: AuthRequest, res: R
     kicked_classes_count: kickedClassesCount,
   });
   db.auditLog.set(log.id, log);
+  persistAuditLog(log);
 
   res.json({
     success: true,

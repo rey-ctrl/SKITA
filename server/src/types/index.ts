@@ -141,7 +141,32 @@ export interface Assignment {
   period_id: string;
   creator_id: string; // guru user_id
   judul: string;
+  deskripsi?: string;
+  deadline?: string; // ISO datetime string
+  subject_id?: string;
+  subject_nama?: string;
   tanggal: string; // YYYY-MM-DD
+  attachments?: Array<{
+    name: string;
+    type: string;
+    size?: string | number;
+    url?: string;
+  }>;
+}
+
+export interface AssignmentSubmission {
+  id: string;
+  assignment_id: string;
+  murid_id: string;
+  murid_nama?: string;
+  submitted_at: string;
+  catatan?: string;
+  files: Array<{
+    name: string;
+    type: string;
+    size?: string;
+    url?: string;
+  }>;
 }
 
 // PRD 6 & FR-A13: holidays & school calendar overrides

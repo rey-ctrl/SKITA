@@ -11,7 +11,7 @@ import { DashboardScreen } from './src/components/DashboardScreen';
 import { InteractiveMapNative } from './src/components/InteractiveMapNative';
 import { SearchOnTheFlyModal } from './src/components/SearchOnTheFlyModal';
 import { ProfileScreen } from './src/components/ProfileScreen';
-import { ClassroomView } from './src/components/ClassroomModal';
+import { ClassroomView, AdminKelasView } from './src/components/ClassroomModal';
 import { AttendanceScreen } from './src/components/AttendanceScreen';
 import { KantinScreen } from './src/components/KantinScreen';
 import { HistoryScreen } from './src/components/HistoryScreen';
@@ -50,7 +50,7 @@ const MainAppContent: React.FC = () => {
         {activeTab === 'sekolah' && <ClassroomView />}
         {/* dashboard = ClassroomView juga (school dashboard setelah join) */}
         {activeTab === 'dashboard' && <ClassroomView />}
-        {activeTab === 'kelas' && <ClassroomView />}
+        {activeTab === 'kelas' && (user?.role === 'admin' ? <AdminKelasView /> : <ClassroomView />)}
         {activeTab === 'absensi' && <AttendanceScreen />}
         {activeTab === 'kantin' && <KantinScreen />}
         {activeTab === 'history' && <HistoryScreen />}

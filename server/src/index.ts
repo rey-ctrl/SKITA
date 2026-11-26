@@ -126,8 +126,17 @@ if (process.env.NODE_ENV !== 'test' && !process.env.TEST_MODE) {
   }, 60 * 1000);
 
   connectPostgres().finally(() => {
-    app.listen(PORT, () => {
+    const server = app.listen(PORT, () => {
       console.log(`[SKITA Backend] Server berjalan di http://localhost:${PORT}`);
     });
+
+    const shutdown = () => {
+      server.close(() => {
+        process.exit(0);
+      });
+    };
+
+    process.on('SIGTERM', shutdown);
+    process.on('SIGINT', shutdown);
   });
 }

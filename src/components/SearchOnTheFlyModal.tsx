@@ -16,7 +16,7 @@ import { apiClient } from '../services/api';
 import { Ionicons } from '@expo/vector-icons';
 
 export const SearchOnTheFlyModal: React.FC = () => {
-  const { addSchoolFromSearch, schools, setSelectedSchool, setActiveTab } = useApp();
+  const { addSchoolFromSearch, schools, setSelectedSchool, setActiveTab, refreshSchools } = useApp();
 
   const [query, setQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
@@ -152,6 +152,7 @@ export const SearchOnTheFlyModal: React.FC = () => {
 
     setIsImporting(false);
     setSelectedPlaces([]);
+    await refreshSchools();
 
     if (successCount > 0) {
       Alert.alert(

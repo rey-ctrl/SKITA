@@ -3,6 +3,7 @@ import { db } from '../db/store.js';
 import { authMiddleware, requireRole, AuthRequest } from '../middleware/auth.js';
 import { AccessCode, AuditLog } from '../types/index.js';
 import { generateRandomCode, getNextMondayWib } from '../utils/codes.js';
+import { persistAccessCode, persistAuditLog } from '../db/postgres.js';
 
 const router = Router();
 router.use(authMiddleware);
@@ -78,6 +79,7 @@ router.post('/school', requireRole('sekolah', 'admin'), (req: AuthRequest, res: 
     if (c.target_id === school_id && c.scope === scope && c.is_active) {
       c.is_active = false;
       db.accessCodes.set(c.id, c);
+      persistAccessCode(c);
     }
   }
 
@@ -92,9 +94,11 @@ router.post('/school', requireRole('sekolah', 'admin'), (req: AuthRequest, res: 
     is_active: true,
   };
   db.accessCodes.set(code.id, code);
+  persistAccessCode(code);
 
   const log = auditEntry(req.user!.userId, 'create_code', 'access_code', code.id, { school_id, scope });
   db.auditLog.set(log.id, log);
+  persistAuditLog(log);
 
   res.status(201).json({ success: true, code });
 });
@@ -125,6 +129,7 @@ router.post('/class', requireRole('sekolah', 'admin'), (req: AuthRequest, res: R
     if (c.target_id === class_id && c.scope === 'class' && c.is_active) {
       c.is_active = false;
       db.accessCodes.set(c.id, c);
+      persistAccessCode(c);
     }
   }
 
@@ -139,9 +144,11 @@ router.post('/class', requireRole('sekolah', 'admin'), (req: AuthRequest, res: R
     is_active: true,
   };
   db.accessCodes.set(code.id, code);
+  persistAccessCode(code);
 
   const log = auditEntry(req.user!.userId, 'create_code', 'access_code', code.id, { class_id, school_id: kelas.school_id });
   db.auditLog.set(log.id, log);
+  persistAuditLog(log);
 
   res.status(201).json({ success: true, code });
 });
@@ -216,6 +223,7 @@ router.post('/rotate/:code_id', requireRole('sekolah', 'admin'), (req: AuthReque
   // Nonaktifkan lama
   existing.is_active = false;
   db.accessCodes.set(existing.id, existing);
+  persistAccessCode(existing);
 
   // Buat baru dengan kode baru, valid_until tetap ikut jadwal rotasi
   const now = new Date();
@@ -229,6 +237,7 @@ router.post('/rotate/:code_id', requireRole('sekolah', 'admin'), (req: AuthReque
     is_active: true,
   };
   db.accessCodes.set(newCode.id, newCode);
+  persistAccessCode(newCode);
 
   const log = auditEntry(req.user!.userId, 'rotate_code', 'access_code', newCode.id, {
     old_code_id: existing.id,
@@ -236,6 +245,7 @@ router.post('/rotate/:code_id', requireRole('sekolah', 'admin'), (req: AuthReque
     target_id: newCode.target_id,
   });
   db.auditLog.set(log.id, log);
+  persistAuditLog(log);
 
   res.status(201).json({ success: true, code: newCode });
 });
